@@ -1,12 +1,62 @@
 pipeline {
     agent {
-        docker { image 'node:24.11.0-alpine3.22' }
+        docker {
+            image 'docker:27.2-dind'
+            args '--privileged -v /var/run/docker.sock:/var/run/docker.sock -u 0'
+        }
+    }
+    parameters {
+        string(name: 'ECR_REGISTRY', defaultValue: "${ECR_REGISTRY}", description: 'ECR Registry URL (e.g., account.dkr.ecr.region.amazonaws.com)')
+        string(name: 'SERVICE_REPO', defaultValue: "${SERVICE_REPO}", description: 'Service Repository Name (e.g., aurora-microservices)')
+        string(name: 'AWS_REGION', defaultValue: "${AWS_REGION}", description: 'AWS Region')
+        string(name: 'GITHUB_REPO', defaultValue: "${GITHUB_REPO}", description: 'Github repo')
+        string(name: 'SERVICE_NAME', defaultValue: "adservice", description: 'Docker Service Name (e.g., adservice)')
     }
     stages {
-        stage('Test') {
+        stage('Checkout') {
             steps {
-                sh 'node --eval "console.log(process.platform,process.env.CI)"'
+                git branch: 'kv-dev',
+                    url: "${params.GITHUB_REPO}.git"
             }
+        }
+        stage('Setup') {
+            steps {
+                sh 'apk add --no-cache aws-cli'
+            }
+        }
+        stage('Build') {
+            steps {
+                sh '''
+                    docker build \
+                        -f src/${SERVICE_NAME}/Dockerfile \
+                        -t ${SERVICE_REPO}/${SERVICE_NAME}:latest \
+                        src/${SERVICE_NAME}
+                '''
+            }
+        }
+        stage('Push') {
+            steps {
+                withCredentials([[
+                    $class: 'AmazonWebServicesCredentialsBinding',
+                    credentialsId: 'aws-creds',
+                    accessKeyVariable: 'AWS_ACCESS_KEY_ID',
+                    secretKeyVariable: 'AWS_SECRET_ACCESS_KEY'
+                ]]) {
+                    sh '''
+                        aws ecr get-login-password --region ${AWS_REGION} | docker login --username AWS --password-stdin ${ECR_REGISTRY}
+                        docker tag ${SERVICE_REPO}/${SERVICE_NAME}:latest ${ECR_REGISTRY}/${SERVICE_REPO}/${SERVICE_NAME}:latest
+                        docker push ${ECR_REGISTRY}/${SERVICE_REPO}/${SERVICE_NAME}:latest
+                    '''
+                }
+            }
+        }
+    }
+    post {
+        always {
+            sh '''
+                docker rmi ${SERVICE_REPO}/${SERVICE_NAME}:latest \
+                           ${ECR_REGISTRY}/${SERVICE_REPO}/${SERVICE_NAME}:latest || true
+            '''
         }
     }
 }
