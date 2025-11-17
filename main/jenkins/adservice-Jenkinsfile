@@ -23,6 +23,9 @@ pipeline {
             steps {
                 script {
                     sh '''
+                        git config --global --add safe.directory ${WORKSPACE}
+                    '''
+                    sh '''
                         apk add --no-cache curl tar gzip
                         curl -sSfL https://github.com/gitleaks/gitleaks/releases/download/v8.29.0/gitleaks_8.29.0_linux_x64.tar.gz | tar -xzf -
                         chmod +x gitleaks
