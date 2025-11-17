@@ -28,7 +28,7 @@ pipeline {
                         chmod +x gitleaks
                     '''
                     sh '''
-                        ./gitleaks git -v --exit-code 1 --redact 100 --report-path leaks.json .
+                        ./gitleaks git -v --exit-code 1 --redact=100 --report-path leaks.json .
                     '''
                     archiveArtifacts artifacts: 'leaks.json', allowEmptyArchive: true, fingerprint: true
                 }
