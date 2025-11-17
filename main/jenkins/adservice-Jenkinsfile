@@ -33,10 +33,12 @@ pipeline {
                     sh '''
                         ./gitleaks git -v --exit-code 1 --redact=100 --report-path leaks.json .
                     '''
-                    archiveArtifacts artifacts: 'leaks.json', allowEmptyArchive: true, fingerprint: true
                 }
             }
             post {
+              always {
+                    archiveArtifacts artifacts: 'leaks.json', allowEmptyArchive: true, fingerprint: true
+                }
                 failure {
                     echo 'Pipeline failed: Secrets detected in code. Review leaks.json for details.'
                 }
@@ -81,8 +83,7 @@ pipeline {
                            ${ECR_REGISTRY}/${SERVICE_REPO}/${SERVICE_NAME}:latest || true
             '''
             cleanWs(
-                deleteDirs: true,  // Thorough: Deletes the workspace dir itself
-                notFailBuild: true  // Ensures cleanup failure doesn't fail the build
+                deleteDirs: true
             )
         }
     }
