@@ -19,6 +19,26 @@ pipeline {
                     url: "${params.GITHUB_REPO}.git"
             }
         }
+        stage('Scan for Secrets') {
+            steps {
+                script {
+                    sh '''
+                        apk add --no-cache curl tar gzip
+                        curl -sSfL https://github.com/gitleaks/gitleaks/releases/latest/download/gitleaks_linux_x64.tar.gz | tar -xzf -
+                        chmod +x gitleaks
+                    '''
+                    sh '''
+                        ./gitleaks git -v --exit-code 1 --redact 100 --report-path leaks.json .
+                    '''
+                    archiveArtifacts artifacts: 'leaks.json', allowEmptyArchive: true, fingerprint: true
+                }
+            }
+            post {
+                failure {
+                    echo 'Pipeline failed: Secrets detected in code. Review leaks.json for details.'
+                }
+            }
+        }
         stage('Setup') {
             steps {
                 sh 'apk add --no-cache aws-cli'
@@ -57,6 +77,10 @@ pipeline {
                 docker rmi ${SERVICE_REPO}/${SERVICE_NAME}:latest \
                            ${ECR_REGISTRY}/${SERVICE_REPO}/${SERVICE_NAME}:latest || true
             '''
+            cleanWs(
+                deleteDirs: true,  // Thorough: Deletes the workspace dir itself
+                notFailBuild: true  // Ensures cleanup failure doesn't fail the build
+            )
         }
     }
 }
