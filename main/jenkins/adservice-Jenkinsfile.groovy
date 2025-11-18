@@ -68,6 +68,8 @@ node {
                                    ${params.ECR_REGISTRY}/${params.SERVICE_REPO}/${params.SERVICE_NAME}:latest
 
                         docker push ${params.ECR_REGISTRY}/${params.SERVICE_REPO}/${params.SERVICE_NAME}:latest
+
+                        docker logout ${ECR_REGISTRY} || true
                     """
                 }
             }
