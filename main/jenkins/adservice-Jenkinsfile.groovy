@@ -40,6 +40,18 @@ node {
                 archiveArtifacts artifacts: 'leaks.json', allowEmptyArchive: true, fingerprint: true
             }
 
+            stage('Semgrep SAST Scan') {
+                sh '''
+                    docker run --rm -v "${WORKSPACE}:${WORKSPACE}" -w "${WORKSPACE}" \
+                        semgrep/semgrep semgrep ci \
+                            --config auto \
+                            --sarif > semgrep.sarif \
+                            --error   # remove if you want the build to pass even with findings
+                '''
+
+                archiveArtifacts artifacts: 'semgrep.sarif', allowEmptyArchive: true
+            }
+
             stage('Setup') {
                 sh 'apk add --no-cache aws-cli'
             }
