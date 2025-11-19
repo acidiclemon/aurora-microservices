@@ -16,8 +16,7 @@ node {
 
         try {
             stage('Checkout') {
-                git branch: 'kv-dev',
-                    url: "${params.GITHUB_REPO}.git"
+                checkout scm
             }
 
             stage('Scan for Secrets') {
