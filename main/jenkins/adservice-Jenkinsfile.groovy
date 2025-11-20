@@ -125,7 +125,7 @@ node {
                     docker rmi ${params.SERVICE_REPO}/${params.SERVICE_NAME}:latest \
                                ${params.ECR_REGISTRY}/${params.SERVICE_REPO}/${params.SERVICE_NAME}:latest || true
                 """
-                cleanWs(deleteDirs: true)
+                cleanWs(cleanWhenFailure: true, deleteDirs: true, disableDeferredWipeout: true)
             }
         }
     }
