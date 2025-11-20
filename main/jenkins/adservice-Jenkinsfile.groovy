@@ -46,12 +46,14 @@ node {
                         if [ -n "${CHANGE_TARGET:-}" ]; then
                             git fetch --no-tags --depth=1 origin "${CHANGE_TARGET}:origin/${CHANGE_TARGET}"
                             export SEMGREP_BASELINE_REF="origin/${CHANGE_TARGET}"
-                        else
+                        elif [ "${BRANCH_NAME}" != "main" ]; then
                             git fetch --no-tags --depth=1 origin main:origin/main
                             export SEMGREP_BASELINE_REF=origin/main
+                        else
+                            unset SEMGREP_BASELINE_REF
                         fi
 
-                        if [ "${BRANCH_NAME}" = "main" ] || [ "${BRANCH_NAME}" = "origin/main" ]; then
+                        if [ "${BRANCH_NAME}" = "main" ]; then
                             semgrep ci --config auto --sarif-output=semgrep.sarif || true
                         else
                             semgrep ci --config auto --sarif-output=semgrep.sarif
