@@ -9,15 +9,13 @@ node {
                 string(name: 'ECR_REGISTRY', defaultValue: "${ECR_REGISTRY}", description: 'ECR Registry URL (e.g., account.dkr.ecr.region.amazonaws.com)'),
                 string(name: 'SERVICE_REPO', defaultValue: "${SERVICE_REPO}", description: 'Service Repository Name (e.g., aurora-microservices)'),
                 string(name: 'AWS_REGION', defaultValue: "${AWS_REGION}", description: 'AWS Region'),
-                string(name: 'GITHUB_REPO', defaultValue: "${GITHUB_REPO}", description: 'Github repo'),
                 string(name: 'SERVICE_NAME', defaultValue: 'adservice', description: 'Docker Service Name (e.g., adservice)')
             ])
         ])
 
         try {
             stage('Checkout') {
-                git branch: 'kv-dev',
-                    url: "${params.GITHUB_REPO}.git"
+                checkout scm
             }
 
             stage('Scan for Secrets') {
@@ -36,8 +34,31 @@ node {
                     archiveArtifacts artifacts: 'leaks.json', allowEmptyArchive: true, fingerprint: true
                     error 'Pipeline failed: Secrets detected in code. Review leaks.json for details.'
                 }
-
                 archiveArtifacts artifacts: 'leaks.json', allowEmptyArchive: true, fingerprint: true
+            }
+
+            stage('Semgrep SAST Scan') {
+                sh 'docker pull semgrep/semgrep:latest'
+                docker.image('semgrep/semgrep').inside {
+                    sh '''
+                        git config --global --add safe.directory "$WORKSPACE"
+
+                        if [ -n "${CHANGE_TARGET:-}" ]; then
+                            git fetch --no-tags --depth=1 origin "${CHANGE_TARGET}:origin/${CHANGE_TARGET}"
+                            export SEMGREP_BASELINE_REF="origin/${CHANGE_TARGET}"
+                        else
+                            git fetch --no-tags --depth=1 origin main:origin/main || git fetch --no-tags --depth=1 origin master:origin/master
+                            export SEMGREP_BASELINE_REF=origin/main
+                        fi
+
+                        if [ "${BRANCH_NAME}" = "main" ]; then
+                            semgrep ci --config auto --sarif-output=semgrep.sarif || true
+                        else
+                            semgrep ci --config auto --sarif-output=semgrep.sarif
+                        fi
+                    '''
+                }
+                archiveArtifacts artifacts: 'semgrep.sarif', allowEmptyArchive: true, fingerprint: true
             }
 
             stage('Setup') {
@@ -75,6 +96,28 @@ node {
             }
 
         } finally {
+            stage('Publish Results') {
+                recordIssues(
+                    enabledForFailure: true,
+                    tool: sarif(
+                        pattern: '**/semgrep.sarif',
+                        name: 'Semgrep Security Scan',
+                        id: 'semgrep'
+                    ),
+                    qualityGates: [
+                        [threshold: 1, type: 'TOTAL_ERROR', unstable: false],
+                        [threshold: 1, type: 'TOTAL_HIGH', unstable: false],
+                        [threshold: 10, type: 'TOTAL_NORMAL', unstable: true]
+                    ],
+                    healthy: 50,
+                    unhealthy: 100
+                )
+            }
+
+            stage('Publish Semgrep SARIF report') {
+                archiveArtifacts artifacts: 'semgrep.sarif', allowEmptyArchive: true, fingerprint: true
+              }
+
             stage('Cleanup') {
                 sh """
                     docker rmi ${params.SERVICE_REPO}/${params.SERVICE_NAME}:latest \

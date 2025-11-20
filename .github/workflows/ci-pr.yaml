@@ -13,18 +13,18 @@
 # limitations under the License.
 
 name: "Continuous Integration - Pull Request"
-on:
-  pull_request:
-    branches:
-      - main
-    paths-ignore:
-      - '**/README.md'
-      - 'kustomize/**'
-      - '.github/workflows/kustomize-build-ci.yaml'
-      - 'terraform/**'
-      - '.github/workflows/terraform-validate-ci.yaml'
-      - 'helm-chart/**'
-      - '.github/workflows/helm-chart-ci.yaml'
+# on:
+#   pull_request:
+#     branches:
+#       - main
+#     paths-ignore:
+#       - '**/README.md'
+#       - 'kustomize/**'
+#       - '.github/workflows/kustomize-build-ci.yaml'
+#       - 'terraform/**'
+#       - '.github/workflows/terraform-validate-ci.yaml'
+#       - 'helm-chart/**'
+#       - '.github/workflows/helm-chart-ci.yaml'
 
 # Ensure this workflow only runs for the most recent commit of a pull-request
 concurrency:
