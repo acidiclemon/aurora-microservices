@@ -106,10 +106,11 @@ node {
                     ),
                     qualityGates: [
                         [threshold: 1, type: 'TOTAL_ERROR', unstable: false],
-                        [threshold: 5, type: 'TOTAL_HIGH', unstable: true]
+                        [threshold: 1, type: 'TOTAL_HIGH', unstable: false],
+                        [threshold: 10, type: 'TOTAL_NORMAL', unstable: true]
                     ],
-                    healthy: 5,
-                    unhealthy: 10
+                    healthy: 50,
+                    unhealthy: 100
                 )
             }
 
