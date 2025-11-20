@@ -9,7 +9,6 @@ node {
                 string(name: 'ECR_REGISTRY', defaultValue: "${ECR_REGISTRY}", description: 'ECR Registry URL (e.g., account.dkr.ecr.region.amazonaws.com)'),
                 string(name: 'SERVICE_REPO', defaultValue: "${SERVICE_REPO}", description: 'Service Repository Name (e.g., aurora-microservices)'),
                 string(name: 'AWS_REGION', defaultValue: "${AWS_REGION}", description: 'AWS Region'),
-                string(name: 'GITHUB_REPO', defaultValue: "${GITHUB_REPO}", description: 'Github repo'),
                 string(name: 'SERVICE_NAME', defaultValue: 'adservice', description: 'Docker Service Name (e.g., adservice)')
             ])
         ])
@@ -35,20 +34,14 @@ node {
                     archiveArtifacts artifacts: 'leaks.json', allowEmptyArchive: true, fingerprint: true
                     error 'Pipeline failed: Secrets detected in code. Review leaks.json for details.'
                 }
-
                 archiveArtifacts artifacts: 'leaks.json', allowEmptyArchive: true, fingerprint: true
             }
 
             stage('Semgrep SAST Scan') {
-                sh '''
-                    docker run --rm -v "${WORKSPACE}:${WORKSPACE}" -w "${WORKSPACE}" \
-                        semgrep/semgrep semgrep ci \
-                            --config auto \
-                            --sarif > semgrep.sarif \
-                            --error   # remove if you want the build to pass even with findings
-                '''
-
-                archiveArtifacts artifacts: 'semgrep.sarif', allowEmptyArchive: true
+                docker.image('semgrep/semgrep').inside {
+                    sh 'semgrep ci --config auto --sarif-output=semgrep.sarif'
+                }
+                archiveArtifacts artifacts: 'semgrep.sarif', allowEmptyArchive: true, fingerprint: true
             }
 
             stage('Setup') {
@@ -86,6 +79,27 @@ node {
             }
 
         } finally {
+            stage('Publish Results') {
+                recordIssues(
+                    enabledForFailure: true,
+                    tool: sarif(
+                        pattern: '**/semgrep.sarif',
+                        name: 'Semgrep Security Scan',
+                        id: 'semgrep'
+                    ),
+                    qualityGates: [
+                        [threshold: 1, type: 'TOTAL_ERROR', unstable: false],
+                        [threshold: 5, type: 'TOTAL_HIGH', unstable: true]
+                    ],
+                    healthy: 5,
+                    unhealthy: 10
+                )
+            }
+
+            stage('Publish Semgrep SARIF report') {
+                archiveArtifacts artifacts: 'semgrep.sarif', allowEmptyArchive: true, fingerprint: true
+              }
+
             stage('Cleanup') {
                 sh """
                     docker rmi ${params.SERVICE_REPO}/${params.SERVICE_NAME}:latest \
