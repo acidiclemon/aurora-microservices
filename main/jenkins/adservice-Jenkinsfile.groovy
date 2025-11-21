@@ -76,6 +76,19 @@ node {
                 """
             }
 
+            stage('Trivy Security Scan') {
+              sh """
+                  docker run --rm \
+                  -v /var/run/docker.sock:/var/run/docker.sock \
+                  -v \$HOME/.cache/trivy:/root/.cache/ \
+                  aquasec/trivy image \
+                  --exit-code 1 \
+                  --severity CRITICAL \
+                  --ignore-unfixed \
+                  ${params.SERVICE_REPO}/${params.SERVICE_NAME}:latest
+                  """
+            }
+
             stage('Push') {
                 withCredentials([[
                     $class: 'AmazonWebServicesCredentialsBinding',
@@ -98,7 +111,7 @@ node {
             }
 
         } finally {
-            stage('Publish Results') {
+            stage('Publish Semgrep Warning Plugin Results') {
                 recordIssues(
                     enabledForFailure: true,
                     tool: sarif(
@@ -118,7 +131,18 @@ node {
 
             stage('Publish Semgrep SARIF report') {
                 archiveArtifacts artifacts: 'semgrep.sarif', allowEmptyArchive: true, fingerprint: true
-              }
+            }
+
+            stage('Publish Trivy Security Scan Results') {
+                publishHTML([
+                  allowMissing: false,
+                  alwaysLinkToLastBuild: true,
+                  keepAll: true,
+                  reportDir: '',
+                  reportFiles: 'trivy-report.html',
+                  reportName: 'Trivy Vulnerability Report'
+              ])
+            }
 
             stage('Cleanup') {
                 sh """
