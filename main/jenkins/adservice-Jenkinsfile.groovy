@@ -77,6 +77,7 @@ node {
             }
 
             stage('Trivy Security Scan') {
+              sh 'docker pull aquasec/trivy:latest'
               sh """
                   docker run --rm \
                   -v /var/run/docker.sock:/var/run/docker.sock \
