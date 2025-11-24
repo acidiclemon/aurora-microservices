@@ -83,7 +83,7 @@ node {
                   -v \$HOME/.cache/trivy:/root/.cache/ \
                   aquasec/trivy image \
                   --exit-code 1 \
-                  --severity CRITICAL \
+                  --severity CRITICAL,HIGH \
                   --ignore-unfixed \
                   ${params.SERVICE_REPO}/${params.SERVICE_NAME}:latest
                   """
