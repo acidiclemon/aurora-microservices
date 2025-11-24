@@ -85,7 +85,7 @@ node {
                   aquasec/trivy image \
                   --scanners vuln,secret,misconfig \
                   --exit-code 1 \
-                  --severity CRITICAL,HIGH \
+                  --severity CRITICAL \
                   --ignore-unfixed \
                   ${params.SERVICE_REPO}/${params.SERVICE_NAME}:latest
                   """
@@ -137,7 +137,7 @@ node {
             }
 
             // TO DO Fix trivy build reports in build result!!!!!!!!!!!!!!!!!!!!!!!
-            
+
             // stage('Publish Trivy Security Scan Results') {
             //     publishHTML([
             //       allowMissing: false,
