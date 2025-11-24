@@ -87,12 +87,8 @@ node {
                   --exit-code 1 \
                   --severity CRITICAL,HIGH \
                   --ignore-unfixed \
-                  --format template \
-                  --template "@contrib/html.tpl" \
-                  --output ./trivy-report.html \
                   ${params.SERVICE_REPO}/${params.SERVICE_NAME}:latest
                   """
-                archiveArtifacts artifacts: 'trivy-report.html', allowEmptyArchive: true, fingerprint: true
 
             }
 
