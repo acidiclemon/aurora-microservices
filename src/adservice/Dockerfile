@@ -18,8 +18,6 @@ ENV AWS_SECRET_ACCESS_KEY=ASIATESTKEYEXAMPLE123
 
 USER root
 
-RUN apk add --no-cache curl=7.61.1-r3
-
 EXPOSE 22
 
 WORKDIR /app
@@ -45,8 +43,6 @@ FROM eclipse-temurin:25-jre-alpine@sha256:bf9c91071c4f90afebb31d735f111735975d6f
 ENV AWS_SECRET_ACCESS_KEY=ASIATESTKEYEXAMPLE123
 
 USER root
-
-RUN apk add --no-cache curl=7.61.1-r3
 
 EXPOSE 22
 
