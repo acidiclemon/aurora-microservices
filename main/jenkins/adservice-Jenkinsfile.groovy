@@ -63,9 +63,9 @@ node {
             //     archiveArtifacts artifacts: 'semgrep.sarif', allowEmptyArchive: true, fingerprint: true
             // }
 
-            stage('Setup') {
-                sh 'apk add --no-cache aws-cli'
-            }
+            // stage('Setup') {
+            //     sh 'apk add --no-cache aws-cli'
+            // }
 
             stage('Build') {
                 sh """
