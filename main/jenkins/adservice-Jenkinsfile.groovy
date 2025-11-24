@@ -144,6 +144,8 @@ node {
               ])
             }
 
+            sh 'chown -R 1000:1000 .' // fix perm issue
+
             stage('Cleanup') {
                 sh """
                     docker rmi ${params.SERVICE_REPO}/${params.SERVICE_NAME}:latest \
