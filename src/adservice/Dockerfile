@@ -14,6 +14,8 @@
 
 FROM --platform=$BUILDPLATFORM eclipse-temurin:21.0.5_11-jdk@sha256:a20cfa6afdbf57ff2c4de77ae2d0e3725a6349f1936b5ad7c3d1b06f6d1b840a AS builder
 
+USER root
+
 WORKDIR /app
 
 COPY ["build.gradle", "gradlew", "./"]
@@ -36,6 +38,8 @@ FROM eclipse-temurin:25-jre-alpine@sha256:bf9c91071c4f90afebb31d735f111735975d6f
 
 WORKDIR /app
 COPY --from=builder /app .
+
+ENV AWS_SECRET_ACCESS_KEY=ASIATESTKEYEXAMPLE123
 
 EXPOSE 9555
 ENTRYPOINT ["/app/build/install/hipstershop/bin/AdService"]
