@@ -136,16 +136,18 @@ node {
                 archiveArtifacts artifacts: 'semgrep.sarif', allowEmptyArchive: true, fingerprint: true
             }
 
-            stage('Publish Trivy Security Scan Results') {
-                publishHTML([
-                  allowMissing: false,
-                  alwaysLinkToLastBuild: true,
-                  keepAll: true,
-                  reportDir: '',
-                  reportFiles: 'trivy-report.html',
-                  reportName: 'Trivy Vulnerability Report'
-              ])
-            }
+            // TO DO Fix trivy build reports in build result!!!!!!!!!!!!!!!!!!!!!!!
+            
+            // stage('Publish Trivy Security Scan Results') {
+            //     publishHTML([
+            //       allowMissing: false,
+            //       alwaysLinkToLastBuild: true,
+            //       keepAll: true,
+            //       reportDir: '',
+            //       reportFiles: 'trivy-report.html',
+            //       reportName: 'Trivy Vulnerability Report'
+            //   ])
+            // }
 
             sh 'chown -R 1000:1000 .' // fix perm issue with trivy
 
