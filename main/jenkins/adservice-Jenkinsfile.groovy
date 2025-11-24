@@ -83,6 +83,7 @@ node {
                   -v /var/run/docker.sock:/var/run/docker.sock \
                   -v \$HOME/.cache/trivy:/root/.cache/ \
                   aquasec/trivy image \
+                  --scanners vuln,secret,misconfig \
                   --exit-code 1 \
                   --severity CRITICAL,HIGH \
                   --ignore-unfixed \
