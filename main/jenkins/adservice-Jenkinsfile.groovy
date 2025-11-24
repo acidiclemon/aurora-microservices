@@ -144,7 +144,7 @@ node {
               ])
             }
 
-            sh 'chown -R 1000:1000 .' // fix perm issue
+            sh 'chown -R 1000:1000 .' // fix perm issue with trivy
 
             stage('Cleanup') {
                 sh """
