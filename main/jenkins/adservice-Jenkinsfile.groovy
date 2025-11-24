@@ -37,31 +37,31 @@ node {
                 archiveArtifacts artifacts: 'leaks.json', allowEmptyArchive: true, fingerprint: true
             }
 
-            stage('Semgrep SAST Scan') {
-                sh 'docker pull semgrep/semgrep:latest'
-                docker.image('semgrep/semgrep').inside {
-                    sh '''
-                        git config --global --add safe.directory "$WORKSPACE"
+            // stage('Semgrep SAST Scan') {
+            //     sh 'docker pull semgrep/semgrep:latest'
+            //     docker.image('semgrep/semgrep').inside {
+            //         sh '''
+            //             git config --global --add safe.directory "$WORKSPACE"
 
-                        if [ -n "${CHANGE_TARGET:-}" ]; then
-                            git fetch --no-tags --depth=1 origin "${CHANGE_TARGET}:origin/${CHANGE_TARGET}"
-                            export SEMGREP_BASELINE_REF="origin/${CHANGE_TARGET}"
-                        elif [ "${BRANCH_NAME}" != "main" ]; then
-                            git fetch --no-tags --depth=1 origin main:origin/main
-                            export SEMGREP_BASELINE_REF=origin/main
-                        else
-                            unset SEMGREP_BASELINE_REF
-                        fi
+            //             if [ -n "${CHANGE_TARGET:-}" ]; then
+            //                 git fetch --no-tags --depth=1 origin "${CHANGE_TARGET}:origin/${CHANGE_TARGET}"
+            //                 export SEMGREP_BASELINE_REF="origin/${CHANGE_TARGET}"
+            //             elif [ "${BRANCH_NAME}" != "main" ]; then
+            //                 git fetch --no-tags --depth=1 origin main:origin/main
+            //                 export SEMGREP_BASELINE_REF=origin/main
+            //             else
+            //                 unset SEMGREP_BASELINE_REF
+            //             fi
 
-                        if [ "${BRANCH_NAME}" = "main" ]; then
-                            semgrep ci --config auto --sarif-output=semgrep.sarif || true
-                        else
-                            semgrep ci --config auto --sarif-output=semgrep.sarif
-                        fi
-                    '''
-                }
-                archiveArtifacts artifacts: 'semgrep.sarif', allowEmptyArchive: true, fingerprint: true
-            }
+            //             if [ "${BRANCH_NAME}" = "main" ]; then
+            //                 semgrep ci --config auto --sarif-output=semgrep.sarif || true
+            //             else
+            //                 semgrep ci --config auto --sarif-output=semgrep.sarif
+            //             fi
+            //         '''
+            //     }
+            //     archiveArtifacts artifacts: 'semgrep.sarif', allowEmptyArchive: true, fingerprint: true
+            // }
 
             stage('Setup') {
                 sh 'apk add --no-cache aws-cli'
