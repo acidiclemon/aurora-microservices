@@ -20,6 +20,7 @@ node {
 
             stage('Checkov Scan') {
                 sh 'docker pull bridgecrew/checkov:latest'
+                sh 'mkdir -p checkov-results'
                 sh '''
                     checkov -d . \
                         --compact \
