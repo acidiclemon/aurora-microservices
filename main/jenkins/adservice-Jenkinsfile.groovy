@@ -32,9 +32,7 @@ node {
                         -o json \
                         -o junitxml \
                         --output-file-path checkov-results/report \
-                        --output cli > checkov-results/checkov-report.html 2>&1 \
-                        && ls -la checkov-results/ \
-                        && file checkov-results/checkov-report.html  # Confirms: "HTML document, ASCII text"
+                        --output cli > checkov-results/checkov-report.html 2>&1
                 '''
 
                 // Quick peek: Show first 500 chars of the HTML (remove after testing)
