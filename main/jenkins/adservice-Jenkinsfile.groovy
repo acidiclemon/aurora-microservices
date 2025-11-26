@@ -18,6 +18,23 @@ node {
                 checkout scm
             }
 
+            stage('Checkov Scan') {
+                sh 'docker pull bridgecrew/checkov:latest'
+                docker.image('bridgecrew/checkov:latest').inside('--entrypoint=""') {
+                    sh 'mkdir -p checkov-results'
+                    sh '''
+                        checkov -d main/terraform/ \
+                            --compact \
+                            --soft-fail \
+                            --skip-download \
+                            --download-external-modules true \
+                            --framework terraform \
+                            --output-file-path checkov-results/ \
+                            --output sarif \
+                    '''
+                }
+            }
+
             stage('Scan for Secrets') {
                 sh 'git config --global --add safe.directory ${WORKSPACE}'
 
@@ -114,7 +131,25 @@ node {
             }
 
         } finally {
-            stage('Publish Semgrep Warning Plugin Results') {
+            stage('Publish Checkov Results') {
+                recordIssues(
+                    enabledForFailure: true,
+                    tool: sarif(
+                        pattern: 'checkov-results/results_sarif.sarif',
+                        name: 'Checkov Security Scan',
+                        id: 'checkov'
+                    ),
+                    qualityGates: [
+                        [threshold: 0.1, type: 'TOTAL_ERROR', unstable: true],
+                        [threshold: 0.1, type: 'TOTAL_HIGH', unstable: true],
+                        [threshold: 3, type: 'TOTAL_NORMAL', unstable: true]
+                    ],
+                    healthy: 5,
+                    unhealthy: 10
+                )
+            }
+
+            stage('Publish Semgrep Results') {
                 recordIssues(
                     enabledForFailure: true,
                     tool: sarif(
