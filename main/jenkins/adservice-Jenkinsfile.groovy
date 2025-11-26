@@ -140,9 +140,9 @@ node {
                         id: 'checkov'
                     ),
                     qualityGates: [
-                        [threshold: 5, type: 'TOTAL_ERROR', unstable: false],
-                        [threshold: 0, type: 'TOTAL_HIGH', unstable: false],
-                        [threshold: 5, type: 'TOTAL_NORMAL', unstable: true]
+                        [threshold: 0.1, type: 'TOTAL_ERROR', unstable: true],
+                        [threshold: 0.1, type: 'TOTAL_HIGH', unstable: true],
+                        [threshold: 3, type: 'TOTAL_NORMAL', unstable: true]
                     ],
                     healthy: 5,
                     unhealthy: 10
