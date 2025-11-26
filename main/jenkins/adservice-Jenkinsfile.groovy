@@ -23,12 +23,11 @@ node {
                 docker.image('bridgecrew/checkov:latest').inside('--entrypoint=""') {
                     sh 'mkdir -p checkov-results'
                     sh '''
-                        checkov -d . \
+                        checkov -d main/terraform/ \
                             --compact \
                             --soft-fail \
                             --skip-download \
                             --download-external-modules true \
-                            --directory main/terraform/ \
                             --framework terraform \
                             --output-file-path checkov-results/
                             --output sarif \
