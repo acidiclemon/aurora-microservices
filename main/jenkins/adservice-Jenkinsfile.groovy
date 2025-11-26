@@ -20,23 +20,20 @@ node {
 
             stage('Checkov Scan') {
                 sh 'docker pull bridgecrew/checkov:latest'
-                sh 'mkdir -p checkov-results'
-                sh '''
-                    checkov -d . \
-                        --compact \
-                        --soft-fail \
-                        --skip-download \
-                        --download-external-modules true \
-                        --directory terraform/ \
-                        --framework terraform \
-                        -o json \
-                        -o junitxml \
-                        --output-file-path checkov-results/report \
-                        --output cli > checkov-results/checkov-report.html 2>&1
-                '''
-
-                // Quick peek: Show first 500 chars of the HTML (remove after testing)
-                sh 'head -500 checkov-results/checkov-report.html | grep -E "(<table|FAILED|PASSED|CHECK)" || echo "HTML generated successfully"'
+                docker.image('bridgecrew/checkov:latest').inside('--entrypoint=""') {
+                    sh 'mkdir -p checkov-results'
+                    sh '''
+                        checkov -d . \
+                            --compact \
+                            --soft-fail \
+                            --skip-download \
+                            --download-external-modules true \
+                            --directory main/terraform/ \
+                            --framework terraform \
+                            --output-file-path checkov-results/
+                            --output sarif \
+                    '''
+                }
             }
 
             // stage('Scan for Secrets') {
@@ -135,7 +132,25 @@ node {
             // }
 
         } finally {
-            stage('Publish Semgrep Warning Plugin Results') {
+            stage('Publish Checkov Results') {
+                recordIssues(
+                    enabledForFailure: true,
+                    tool: sarif(
+                        pattern: 'checkov-results/results_sarif.sarif',
+                        name: 'Checkov Security Scan',
+                        id: 'checkov'
+                    ),
+                    qualityGates: [
+                        [threshold: 5, type: 'TOTAL_ERROR', unstable: false],
+                        [threshold: 0, type: 'TOTAL_HIGH', unstable: false],
+                        [threshold: 5, type: 'TOTAL_NORMAL', unstable: true]
+                    ],
+                    healthy: 5,
+                    unhealthy: 10
+                )
+            }
+
+            stage('Publish Semgrep Results') {
                 recordIssues(
                     enabledForFailure: true,
                     tool: sarif(
