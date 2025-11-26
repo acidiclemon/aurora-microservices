@@ -29,7 +29,7 @@ node {
                             --skip-download \
                             --download-external-modules true \
                             --framework terraform \
-                            --output-file-path checkov-results/
+                            --output-file-path checkov-results/ \
                             --output sarif \
                     '''
                 }
