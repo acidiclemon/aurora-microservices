@@ -35,100 +35,100 @@ node {
                 }
             }
 
-            // stage('Scan for Secrets') {
-            //     sh 'git config --global --add safe.directory ${WORKSPACE}'
+            stage('Scan for Secrets') {
+                sh 'git config --global --add safe.directory ${WORKSPACE}'
 
-            //     sh '''
-            //         apk add --no-cache curl tar gzip
-            //         curl -sSfL https://github.com/gitleaks/gitleaks/releases/download/v8.29.0/gitleaks_8.29.0_linux_x64.tar.gz \
-            //             | tar -xzf - gitleaks
-            //         chmod +x gitleaks
-            //     '''
+                sh '''
+                    apk add --no-cache curl tar gzip
+                    curl -sSfL https://github.com/gitleaks/gitleaks/releases/download/v8.29.0/gitleaks_8.29.0_linux_x64.tar.gz \
+                        | tar -xzf - gitleaks
+                    chmod +x gitleaks
+                '''
 
-            //     try {
-            //         sh './gitleaks git -v --exit-code 1 --redact=100 --report-path leaks.json .'
-            //     } catch (err) {
-            //         archiveArtifacts artifacts: 'leaks.json', allowEmptyArchive: true, fingerprint: true
-            //         error 'Pipeline failed: Secrets detected in code. Review leaks.json for details.'
-            //     }
-            //     archiveArtifacts artifacts: 'leaks.json', allowEmptyArchive: true, fingerprint: true
-            // }
+                try {
+                    sh './gitleaks git -v --exit-code 1 --redact=100 --report-path leaks.json .'
+                } catch (err) {
+                    archiveArtifacts artifacts: 'leaks.json', allowEmptyArchive: true, fingerprint: true
+                    error 'Pipeline failed: Secrets detected in code. Review leaks.json for details.'
+                }
+                archiveArtifacts artifacts: 'leaks.json', allowEmptyArchive: true, fingerprint: true
+            }
 
-            // stage('Semgrep SAST Scan') {
-            //     sh 'docker pull semgrep/semgrep:latest'
-            //     docker.image('semgrep/semgrep').inside {
-            //         sh '''
-            //             git config --global --add safe.directory "$WORKSPACE"
+            stage('Semgrep SAST Scan') {
+                sh 'docker pull semgrep/semgrep:latest'
+                docker.image('semgrep/semgrep').inside {
+                    sh '''
+                        git config --global --add safe.directory "$WORKSPACE"
 
-            //             if [ -n "${CHANGE_TARGET:-}" ]; then
-            //                 git fetch --no-tags --depth=1 origin "${CHANGE_TARGET}:origin/${CHANGE_TARGET}"
-            //                 export SEMGREP_BASELINE_REF="origin/${CHANGE_TARGET}"
-            //             elif [ "${BRANCH_NAME}" != "main" ]; then
-            //                 git fetch --no-tags --depth=1 origin main:origin/main
-            //                 export SEMGREP_BASELINE_REF=origin/main
-            //             else
-            //                 unset SEMGREP_BASELINE_REF
-            //             fi
+                        if [ -n "${CHANGE_TARGET:-}" ]; then
+                            git fetch --no-tags --depth=1 origin "${CHANGE_TARGET}:origin/${CHANGE_TARGET}"
+                            export SEMGREP_BASELINE_REF="origin/${CHANGE_TARGET}"
+                        elif [ "${BRANCH_NAME}" != "main" ]; then
+                            git fetch --no-tags --depth=1 origin main:origin/main
+                            export SEMGREP_BASELINE_REF=origin/main
+                        else
+                            unset SEMGREP_BASELINE_REF
+                        fi
 
-            //             if [ "${BRANCH_NAME}" = "main" ]; then
-            //                 semgrep ci --config auto --sarif-output=semgrep.sarif || true
-            //             else
-            //                 semgrep ci --config auto --sarif-output=semgrep.sarif
-            //             fi
-            //         '''
-            //     }
-            //     archiveArtifacts artifacts: 'semgrep.sarif', allowEmptyArchive: true, fingerprint: true
-            // }
+                        if [ "${BRANCH_NAME}" = "main" ]; then
+                            semgrep ci --config auto --sarif-output=semgrep.sarif || true
+                        else
+                            semgrep ci --config auto --sarif-output=semgrep.sarif
+                        fi
+                    '''
+                }
+                archiveArtifacts artifacts: 'semgrep.sarif', allowEmptyArchive: true, fingerprint: true
+            }
 
-            // stage('Setup') {
-            //     sh 'apk add --no-cache aws-cli'
-            // }
+            stage('Setup') {
+                sh 'apk add --no-cache aws-cli'
+            }
 
-            // stage('Build') {
-            //     sh """
-            //         docker build \
-            //             -f src/${params.SERVICE_NAME}/Dockerfile \
-            //             -t ${params.SERVICE_REPO}/${params.SERVICE_NAME}:latest \
-            //             src/${params.SERVICE_NAME}
-            //     """
-            // }
+            stage('Build') {
+                sh """
+                    docker build \
+                        -f src/${params.SERVICE_NAME}/Dockerfile \
+                        -t ${params.SERVICE_REPO}/${params.SERVICE_NAME}:latest \
+                        src/${params.SERVICE_NAME}
+                """
+            }
 
-            // stage('Trivy Security Scan') {
-            //   sh 'docker pull aquasec/trivy:latest'
-            //   sh """
-            //       docker run --rm \
-            //       -v /var/run/docker.sock:/var/run/docker.sock \
-            //       -v \$HOME/.cache/trivy:/root/.cache/ \
-            //       aquasec/trivy image \
-            //       --scanners vuln,secret,misconfig \
-            //       --exit-code 1 \
-            //       --severity CRITICAL \
-            //       --ignore-unfixed \
-            //       ${params.SERVICE_REPO}/${params.SERVICE_NAME}:latest
-            //       """
+            stage('Trivy Security Scan') {
+              sh 'docker pull aquasec/trivy:latest'
+              sh """
+                  docker run --rm \
+                  -v /var/run/docker.sock:/var/run/docker.sock \
+                  -v \$HOME/.cache/trivy:/root/.cache/ \
+                  aquasec/trivy image \
+                  --scanners vuln,secret,misconfig \
+                  --exit-code 1 \
+                  --severity CRITICAL \
+                  --ignore-unfixed \
+                  ${params.SERVICE_REPO}/${params.SERVICE_NAME}:latest
+                  """
 
-            // }
+            }
 
-            // stage('Push') {
-            //     withCredentials([[
-            //         $class: 'AmazonWebServicesCredentialsBinding',
-            //         credentialsId: 'aws-creds',
-            //         accessKeyVariable: 'AWS_ACCESS_KEY_ID',
-            //         secretKeyVariable: 'AWS_SECRET_ACCESS_KEY'
-            //     ]]) {
-            //         sh """
-            //             aws ecr get-login-password --region ${params.AWS_REGION} | \
-            //             docker login --username AWS --password-stdin ${params.ECR_REGISTRY}
+            stage('Push') {
+                withCredentials([[
+                    $class: 'AmazonWebServicesCredentialsBinding',
+                    credentialsId: 'aws-creds',
+                    accessKeyVariable: 'AWS_ACCESS_KEY_ID',
+                    secretKeyVariable: 'AWS_SECRET_ACCESS_KEY'
+                ]]) {
+                    sh """
+                        aws ecr get-login-password --region ${params.AWS_REGION} | \
+                        docker login --username AWS --password-stdin ${params.ECR_REGISTRY}
 
-            //             docker tag ${params.SERVICE_REPO}/${params.SERVICE_NAME}:latest \
-            //                        ${params.ECR_REGISTRY}/${params.SERVICE_REPO}/${params.SERVICE_NAME}:latest
+                        docker tag ${params.SERVICE_REPO}/${params.SERVICE_NAME}:latest \
+                                   ${params.ECR_REGISTRY}/${params.SERVICE_REPO}/${params.SERVICE_NAME}:latest
 
-            //             docker push ${params.ECR_REGISTRY}/${params.SERVICE_REPO}/${params.SERVICE_NAME}:latest
+                        docker push ${params.ECR_REGISTRY}/${params.SERVICE_REPO}/${params.SERVICE_NAME}:latest
 
-            //             docker logout ${ECR_REGISTRY} || true
-            //         """
-            //     }
-            // }
+                        docker logout ${ECR_REGISTRY} || true
+                    """
+                }
+            }
 
         } finally {
             stage('Publish Checkov Results') {
