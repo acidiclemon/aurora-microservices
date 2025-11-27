@@ -54,8 +54,8 @@ node {
                 docker.image('bridgecrew/checkov:latest').inside('--entrypoint=""') {
                     sh 'mkdir -p checkov-results'
                     sh '''
-                        checkov -d main/terraform/ --compact --soft-fail --skip-download
-                            --download-external-modules true --framework terraform
+                        checkov -d main/terraform/ --compact --soft-fail --skip-download \
+                            --download-external-modules true --framework terraform \
                             --output-file-path checkov-results/ --output sarif
                     '''
                 }
@@ -195,7 +195,7 @@ node {
             //   ])
             // }
 
-            sh 'chown -R 1000:1000 .' //Fix perm issue
+            sh 'chown -R 1000:1000 .' //fix perm issue with trivy
 
             stage('Cleanup') {
                 if (servicesToBuild.size() > 0) {
