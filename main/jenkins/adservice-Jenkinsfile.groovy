@@ -71,10 +71,10 @@ node {
                 try {
                     sh './gitleaks git -v --exit-code 1 --redact=100 --report-path leaks.json .'
                 } catch (err) {
-                    archiveArtifacts artifacts: 'leaks.json', allowEmptyArchive: true
-                    error 'Secrets detected'
+                    archiveArtifacts artifacts: 'leaks.json', allowEmptyArchive: true, fingerprint: true
+                    error 'Pipeline failed: Secrets detected in code. Review leaks.json for details.'
                 }
-                archiveArtifacts artifacts: 'leaks.json', allowEmptyArchive: true
+                archiveArtifacts artifacts: 'leaks.json', allowEmptyArchive: true, fingerprint: true
             }
 
             stage('Semgrep SAST Scan') {
@@ -88,11 +88,13 @@ node {
                         elif [ "${BRANCH_NAME}" != "main" ]; then
                             git fetch --no-tags --depth=1 origin main:origin/main
                             export SEMGREP_BASELINE_REF=origin/main
+                        else
+                            unset SEMGREP_BASELINE_REF
                         fi
                         semgrep ci --config auto --sarif-output=semgrep.sarif ${BRANCH_NAME == "main" ? "|| true" : ""}
                     '''
                 }
-                archiveArtifacts artifacts: 'semgrep.sarif', allowEmptyArchive: true
+                archiveArtifacts artifacts: 'semgrep.sarif', allowEmptyArchive: true, fingerprint: true
             }
 
             stage('Setup') { sh 'apk add --no-cache aws-cli' }
@@ -134,6 +136,7 @@ node {
                                 docker login --username AWS --password-stdin ${params.ECR_REGISTRY}
                                 docker tag ${params.SERVICE_REPO}/${service}:latest ${params.ECR_REGISTRY}/${params.SERVICE_REPO}/${service}:latest
                                 docker push ${params.ECR_REGISTRY}/${params.SERVICE_REPO}/${service}:latest
+                                docker logout ${ECR_REGISTRY} || true
                             """
                         }
                     }
@@ -142,15 +145,57 @@ node {
 
         } finally {
             stage('Publish Checkov Results') {
-                recordIssues enabledForFailure: true, tool: sarif(pattern: 'checkov-results/results_sarif.sarif', id: 'checkov')
+                recordIssues(
+                    enabledForFailure: true,
+                    tool: sarif(
+                        pattern: 'checkov-results/results_sarif.sarif',
+                        name: 'Checkov Security Scan',
+                        id: 'checkov'
+                    ),
+                    qualityGates: [
+                        [threshold: 0.1, type: 'TOTAL_ERROR', unstable: true],
+                        [threshold: 0.1, type: 'TOTAL_HIGH', unstable: true],
+                        [threshold: 3, type: 'TOTAL_NORMAL', unstable: true]
+                    ],
+                    healthy: 5,
+                    unhealthy: 10
+                )
             }
 
             stage('Publish Semgrep Results') {
-                recordIssues enabledForFailure: true, tool: sarif(pattern: '**/semgrep.sarif', id: 'semgrep')
+                recordIssues(
+                    enabledForFailure: true,
+                    tool: sarif(
+                        pattern: '**/semgrep.sarif',
+                        name: 'Semgrep Security Scan',
+                        id: 'semgrep'
+                    ),
+                    qualityGates: [
+                        [threshold: 14, type: 'TOTAL_ERROR', unstable: false],
+                        [threshold: 19, type: 'TOTAL_HIGH', unstable: false],
+                        [threshold: 33, type: 'TOTAL_NORMAL', unstable: true]
+                    ],
+                    healthy: 50,
+                    unhealthy: 100
+                )
             }
 
             archiveArtifacts artifacts: 'semgrep.sarif, leaks.json', allowEmptyArchive: true
-            sh 'chown -R 1000:1000 .'
+
+            // TO DO Fix trivy build reports in build result!!!!!!!!!!!!!!!!!!!!!!!
+
+            // stage('Publish Trivy Security Scan Results') {
+            //     publishHTML([
+            //       allowMissing: false,
+            //       alwaysLinkToLastBuild: true,
+            //       keepAll: true,
+            //       reportDir: '',
+            //       reportFiles: 'trivy-report.html',
+            //       reportName: 'Trivy Vulnerability Report'
+            //   ])
+            // }
+
+            sh 'chown -R 1000:1000 .' //Fix perm issue
 
             stage('Cleanup') {
                 if (servicesToBuild.size() > 0) {
