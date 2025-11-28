@@ -91,7 +91,12 @@ node {
                         else
                             unset SEMGREP_BASELINE_REF
                         fi
-                        semgrep ci --config auto --sarif-output=semgrep.sarif ${BRANCH_NAME == "main" ? "|| true" : ""}
+
+                        if [ "${BRANCH_NAME}" = "main" ]; then
+                            semgrep ci --config auto --sarif-output=semgrep.sarif || true
+                        else
+                            semgrep ci --config auto --sarif-output=semgrep.sarif
+                        fi
                     '''
                 }
                 archiveArtifacts artifacts: 'semgrep.sarif', allowEmptyArchive: true, fingerprint: true
