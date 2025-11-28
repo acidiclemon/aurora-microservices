@@ -26,7 +26,7 @@ RUN pip install -r requirements.txt
 
 FROM base
 
-RUN apk update && apk add --upgrade sqlite-libs
+RUN apt-get -qq update && apt-get install -y --upgrade libsqlite3-0
 # ^^^ Fix CVE-2025-6965
 
 # Enable unbuffered logging
