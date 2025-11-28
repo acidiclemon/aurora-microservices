@@ -28,6 +28,7 @@ FROM base
 
 RUN apk update \
     && apk add --no-cache libstdc++ \
+    && apk add --upgrade sqlite-libs \
     && rm -rf /var/cache/apk/*
 
 WORKDIR /loadgen

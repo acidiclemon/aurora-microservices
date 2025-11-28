@@ -25,6 +25,7 @@ COPY requirements.txt .
 RUN pip install -r requirements.txt
 
 FROM base
+
 # Enable unbuffered logging
 ENV PYTHONUNBUFFERED=1
 # Enable Profiler
@@ -32,6 +33,7 @@ ENV ENABLE_PROFILER=1
 
 RUN apk update \
     && apk add --no-cache libstdc++ \
+    && apk add --upgrade sqlite-libs \
     && rm -rf /var/cache/apk/*
 
 WORKDIR /email_server
