@@ -26,14 +26,12 @@ RUN pip install -r requirements.txt
 
 FROM base
 
-RUN apk update && apk add --upgrade sqlite-libs
-# ^^^ Fix CVE-2025-3277, CVE-2025-6965
-
 # Enable unbuffered logging
 ENV PYTHONUNBUFFERED=1
 
 RUN apk update \
     && apk add --no-cache libstdc++ \
+    && apk add --upgrade sqlite-libs \
     && rm -rf /var/cache/apk/*
 
 # get packages
