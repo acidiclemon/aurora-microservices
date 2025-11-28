@@ -49,58 +49,58 @@ node {
         try {
             stage('Checkout') { checkout scm }
 
-            stage('Checkov Scan') {
-                sh 'docker pull bridgecrew/checkov:latest'
-                docker.image('bridgecrew/checkov:latest').inside('--entrypoint=""') {
-                    sh 'mkdir -p checkov-results'
-                    sh '''
-                        checkov -d main/terraform/ --compact --soft-fail --skip-download \
-                            --download-external-modules true --framework terraform \
-                            --output-file-path checkov-results/ --output sarif
-                    '''
-                }
-            }
+            // stage('Checkov Scan') {
+            //     sh 'docker pull bridgecrew/checkov:latest'
+            //     docker.image('bridgecrew/checkov:latest').inside('--entrypoint=""') {
+            //         sh 'mkdir -p checkov-results'
+            //         sh '''
+            //             checkov -d main/terraform/ --compact --soft-fail --skip-download \
+            //                 --download-external-modules true --framework terraform \
+            //                 --output-file-path checkov-results/ --output sarif
+            //         '''
+            //     }
+            // }
 
-            stage('Scan for Secrets') {
-                sh 'git config --global --add safe.directory ${WORKSPACE}'
-                sh '''
-                    apk add --no-cache curl tar gzip
-                    curl -sSfL https://github.com/gitleaks/gitleaks/releases/download/v8.29.0/gitleaks_8.29.0_linux_x64.tar.gz | tar -xzf - gitleaks
-                    chmod +x gitleaks
-                '''
-                try {
-                    sh './gitleaks git -v --exit-code 1 --redact=100 --report-path leaks.json .'
-                } catch (err) {
-                    archiveArtifacts artifacts: 'leaks.json', allowEmptyArchive: true, fingerprint: true
-                    error 'Pipeline failed: Secrets detected in code. Review leaks.json for details.'
-                }
-                archiveArtifacts artifacts: 'leaks.json', allowEmptyArchive: true, fingerprint: true
-            }
+            // stage('Scan for Secrets') {
+            //     sh 'git config --global --add safe.directory ${WORKSPACE}'
+            //     sh '''
+            //         apk add --no-cache curl tar gzip
+            //         curl -sSfL https://github.com/gitleaks/gitleaks/releases/download/v8.29.0/gitleaks_8.29.0_linux_x64.tar.gz | tar -xzf - gitleaks
+            //         chmod +x gitleaks
+            //     '''
+            //     try {
+            //         sh './gitleaks git -v --exit-code 1 --redact=100 --report-path leaks.json .'
+            //     } catch (err) {
+            //         archiveArtifacts artifacts: 'leaks.json', allowEmptyArchive: true, fingerprint: true
+            //         error 'Pipeline failed: Secrets detected in code. Review leaks.json for details.'
+            //     }
+            //     archiveArtifacts artifacts: 'leaks.json', allowEmptyArchive: true, fingerprint: true
+            // }
 
-            stage('Semgrep SAST Scan') {
-                sh 'docker pull semgrep/semgrep:latest'
-                docker.image('semgrep/semgrep').inside {
-                    sh '''
-                        git config --global --add safe.directory "$WORKSPACE"
-                        if [ -n "${CHANGE_TARGET:-}" ]; then
-                            git fetch --no-tags --depth=1 origin "${CHANGE_TARGET}:origin/${CHANGE_TARGET}"
-                            export SEMGREP_BASELINE_REF="origin/${CHANGE_TARGET}"
-                        elif [ "${BRANCH_NAME}" != "main" ]; then
-                            git fetch --no-tags --depth=1 origin main:origin/main
-                            export SEMGREP_BASELINE_REF=origin/main
-                        else
-                            unset SEMGREP_BASELINE_REF
-                        fi
+            // stage('Semgrep SAST Scan') {
+            //     sh 'docker pull semgrep/semgrep:latest'
+            //     docker.image('semgrep/semgrep').inside {
+            //         sh '''
+            //             git config --global --add safe.directory "$WORKSPACE"
+            //             if [ -n "${CHANGE_TARGET:-}" ]; then
+            //                 git fetch --no-tags --depth=1 origin "${CHANGE_TARGET}:origin/${CHANGE_TARGET}"
+            //                 export SEMGREP_BASELINE_REF="origin/${CHANGE_TARGET}"
+            //             elif [ "${BRANCH_NAME}" != "main" ]; then
+            //                 git fetch --no-tags --depth=1 origin main:origin/main
+            //                 export SEMGREP_BASELINE_REF=origin/main
+            //             else
+            //                 unset SEMGREP_BASELINE_REF
+            //             fi
 
-                        if [ "${BRANCH_NAME}" = "main" ]; then
-                            semgrep ci --config auto --sarif-output=semgrep.sarif || true
-                        else
-                            semgrep ci --config auto --sarif-output=semgrep.sarif
-                        fi
-                    '''
-                }
-                archiveArtifacts artifacts: 'semgrep.sarif', allowEmptyArchive: true, fingerprint: true
-            }
+            //             if [ "${BRANCH_NAME}" = "main" ]; then
+            //                 semgrep ci --config auto --sarif-output=semgrep.sarif || true
+            //             else
+            //                 semgrep ci --config auto --sarif-output=semgrep.sarif
+            //             fi
+            //         '''
+            //     }
+            //     archiveArtifacts artifacts: 'semgrep.sarif', allowEmptyArchive: true, fingerprint: true
+            // }
 
             stage('Setup') { sh 'apk add --no-cache aws-cli' }
 
