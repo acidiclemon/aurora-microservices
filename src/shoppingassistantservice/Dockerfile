@@ -26,7 +26,9 @@ RUN pip install -r requirements.txt
 
 FROM base
 
-RUN apt-get -qq update && apt-get install -y --upgrade libsqlite3-0
+RUN apt-get -qq update \
+    && apt-get install -y --upgrade libsqlite3-0 \
+    && rm -rf /var/lib/apt/lists/*
 # ^^^ Fix CVE-2025-6965
 
 # Enable unbuffered logging
