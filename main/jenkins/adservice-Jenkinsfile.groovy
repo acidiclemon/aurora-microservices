@@ -188,7 +188,6 @@ node {
             archiveArtifacts artifacts: 'semgrep.sarif, leaks.json', allowEmptyArchive: true
 
             // TO DO Fix trivy build reports in build result!!!!!!!!!!!!!!!!!!!!!!!
-
             // stage('Publish Trivy Security Scan Results') {
             //     publishHTML([
             //       allowMissing: false,
