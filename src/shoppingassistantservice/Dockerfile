@@ -25,6 +25,10 @@ COPY requirements.txt .
 RUN pip install -r requirements.txt
 
 FROM base
+
+RUN apk update && apk add --upgrade libsqlite3-0
+# ^^^ Fix CVE-2025-6965
+
 # Enable unbuffered logging
 ENV PYTHONUNBUFFERED=1
 
