@@ -5,7 +5,7 @@ provider "aws" {
 # --- 1. S3 BUCKET FOR STATE STORAGE ---
 resource "aws_s3_bucket" "terraform_state" {
   # This name must be GLOBALLY unique (across all AWS users)
-  bucket = "terraform-state-KAQpYd1q"
+  bucket = "terraform-state-bcxulybqnmsqcriipmhmbwgprltcevxt"
 
   # Prevent accidental deletion of this bucket
   lifecycle {

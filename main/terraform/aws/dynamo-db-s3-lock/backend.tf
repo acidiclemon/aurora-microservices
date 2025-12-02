@@ -1,7 +1,7 @@
 terraform {
   # ⚠️ RUN 'terraform apply' ON THE RESOURCES ABOVE BEFORE ENABLING THIS!
   backend "s3" {
-    bucket         = "terraform-state-KAQpYd1q" # Must match bucket name above
+    bucket         = "terraform-state-bcxulybqnmsqcriipmhmbwgprltcevxt" # Must match bucket name above
     key            = "dynamo-db-s3-lock/terraform.tfstate"
     region         = "us-east-2"
     encrypt        = true
