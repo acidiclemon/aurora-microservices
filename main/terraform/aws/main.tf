@@ -182,16 +182,16 @@ resource "aws_service_discovery_service" "shippingservice" {
   }
 }
 
-resource "aws_service_discovery_service" "shoppingassistantservice" {
-  name = "shoppingassistantservice"
-  dns_config {
-    namespace_id = module.ecs_cluster.service_discovery_namespace_id
-    dns_records {
-      ttl  = 10
-      type = "A"
-    }
-  }
-}
+# resource "aws_service_discovery_service" "shoppingassistantservice" {
+#   name = "shoppingassistantservice"
+#   dns_config {
+#     namespace_id = module.ecs_cluster.service_discovery_namespace_id
+#     dns_records {
+#       ttl  = 10
+#       type = "A"
+#     }
+#   }
+# }
 
 # --- Frontend Service (Public) ---
 
@@ -680,56 +680,56 @@ module "ecs_service_shippingservice" {
   service_registry_arn   = aws_service_discovery_service.shippingservice.arn
 }
 
-module "task_definition_shoppingassistantservice" {
-  source             = "./modules/task_definition"
-  family             = "shoppingassistantservice"
-  execution_role_arn = module.ecs_task_roles.execution_role_arn
-  task_role_arn      = module.ecs_task_roles.task_role_arn
-  cpu                = "256"
-  memory             = "512"
-  container_definitions = jsonencode([
-    {
-      name      = "shoppingassistantservice"
-      image     = "${var.image_repo_url}/shoppingassistantservice:${var.image_tag}"
-      essential = true
-      portMappings = [
-        {
-          containerPort = 8080
-          hostPort      = 8080
-        }
-      ]
-      environment = [
-        { name = "PROJECT_ID", value = var.shopping_assistant_gcp_project_id },
-        { name = "REGION", value = var.shopping_assistant_gcp_region },
-        { name = "ALLOYDB_DATABASE_NAME", value = var.shopping_assistant_alloydb_database },
-        { name = "ALLOYDB_TABLE_NAME", value = var.shopping_assistant_alloydb_table },
-        { name = "ALLOYDB_CLUSTER_NAME", value = var.shopping_assistant_alloydb_cluster },
-        { name = "ALLOYDB_INSTANCE_NAME", value = var.shopping_assistant_alloydb_instance },
-        { name = "ALLOYDB_SECRET_NAME", value = var.shopping_assistant_alloydb_secret }
-      ]
-      logConfiguration = {
-        logDriver = "awslogs"
-        options = {
-          "awslogs-group"         = module.log_group.name
-          "awslogs-region"        = var.region
-          "awslogs-stream-prefix" = "shoppingassistantservice"
-        }
-      }
-    }
-  ])
-}
+# module "task_definition_shoppingassistantservice" {
+#   source             = "./modules/task_definition"
+#   family             = "shoppingassistantservice"
+#   execution_role_arn = module.ecs_task_roles.execution_role_arn
+#   task_role_arn      = module.ecs_task_roles.task_role_arn
+#   cpu                = "256"
+#   memory             = "512"
+#   container_definitions = jsonencode([
+#     {
+#       name      = "shoppingassistantservice"
+#       image     = "${var.image_repo_url}/shoppingassistantservice:${var.image_tag}"
+#       essential = true
+#       portMappings = [
+#         {
+#           containerPort = 8080
+#           hostPort      = 8080
+#         }
+#       ]
+#       environment = [
+#         { name = "PROJECT_ID", value = var.shopping_assistant_gcp_project_id },
+#         { name = "REGION", value = var.shopping_assistant_gcp_region },
+#         { name = "ALLOYDB_DATABASE_NAME", value = var.shopping_assistant_alloydb_database },
+#         { name = "ALLOYDB_TABLE_NAME", value = var.shopping_assistant_alloydb_table },
+#         { name = "ALLOYDB_CLUSTER_NAME", value = var.shopping_assistant_alloydb_cluster },
+#         { name = "ALLOYDB_INSTANCE_NAME", value = var.shopping_assistant_alloydb_instance },
+#         { name = "ALLOYDB_SECRET_NAME", value = var.shopping_assistant_alloydb_secret }
+#       ]
+#       logConfiguration = {
+#         logDriver = "awslogs"
+#         options = {
+#           "awslogs-group"         = module.log_group.name
+#           "awslogs-region"        = var.region
+#           "awslogs-stream-prefix" = "shoppingassistantservice"
+#         }
+#       }
+#     }
+#   ])
+# }
 
-module "ecs_service_shoppingassistantservice" {
-  source                 = "./modules/ecs_service"
-  name                   = "shoppingassistantservice"
-  cluster_id             = module.ecs_cluster.id
-  task_definition_arn    = module.task_definition_shoppingassistantservice.arn
-  desired_count          = 1
-  subnet_ids             = module.vpc.private_subnets
-  security_group_ids     = [module.ecs_sg.security_group_id]
-  capacity_provider_name = module.capacity_provider.name
-  service_registry_arn   = aws_service_discovery_service.shoppingassistantservice.arn
-}
+# module "ecs_service_shoppingassistantservice" {
+#   source                 = "./modules/ecs_service"
+#   name                   = "shoppingassistantservice"
+#   cluster_id             = module.ecs_cluster.id
+#   task_definition_arn    = module.task_definition_shoppingassistantservice.arn
+#   desired_count          = 1
+#   subnet_ids             = module.vpc.private_subnets
+#   security_group_ids     = [module.ecs_sg.security_group_id]
+#   capacity_provider_name = module.capacity_provider.name
+#   service_registry_arn   = aws_service_discovery_service.shoppingassistantservice.arn
+# }
 
 # --- Load Generator ---
 
