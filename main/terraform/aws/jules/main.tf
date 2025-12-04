@@ -58,7 +58,7 @@ module "ecs_cluster" {
 
 module "capacity_provider" {
   source                 = "./modules/capacity_provider"
-  name                   = "microservices-cp"
+  name                   = "microservices-capacity-provider"
   auto_scaling_group_arn = module.asg.arn
   cluster_name           = module.ecs_cluster.name
 }
