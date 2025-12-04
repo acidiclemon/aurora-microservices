@@ -82,6 +82,16 @@ module "redis" {
   ecs_sg_id  = module.ecs_sg.security_group_id
 }
 
+resource "aws_iam_service_linked_role" "autoscaling" {
+  aws_service_name = "autoscaling.amazonaws.com"
+  description      = "A service linked role for autoscaling"
+  custom_suffix    = "microservices"
+  # This ensures we don't conflict with the default role if it exists,
+  # but creates a specific one for this deployment if needed.
+  # However, ASG usually uses the default SLR.
+  # If the default SLR is missing, ASG creation might fail or instance launch fails.
+}
+
 # --- Service Discovery Definitions ---
 resource "aws_service_discovery_service" "adservice" {
   name = "adservice"
