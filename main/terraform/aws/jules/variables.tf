@@ -1,7 +1,7 @@
 variable "region" {
   description = "AWS region"
   type        = string
-  default     = "us-east-1"
+  default     = "us-east-2"
 }
 
 variable "cidr_block" {
@@ -25,12 +25,13 @@ variable "private_subnets" {
 variable "availability_zones" {
   description = "List of availability zones"
   type        = list(string)
-  default     = ["us-east-1a", "us-east-1b"]
+  default     = ["us-east-2a", "us-east-2b"]
 }
 
 variable "image_repo_url" {
   description = "Base URL for the ECR repository"
   type        = string
+  default     = "393177628825.dkr.ecr.us-east-2.amazonaws.com/aurora-microservices"
 }
 
 variable "image_tag" {
