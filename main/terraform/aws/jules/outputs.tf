@@ -1,7 +1,19 @@
 output "alb_dns_name" {
-  value = module.alb.dns_name
+  description = "The DNS name of the load balancer"
+  value       = module.alb.dns_name
 }
 
 output "redis_endpoint" {
-  value = module.redis.endpoint
+  description = "Redis endpoint"
+  value       = try(module.redis.cluster_cache_nodes[0].address, "")
+}
+
+output "vpc_id" {
+  description = "The ID of the VPC"
+  value       = module.vpc.vpc_id
+}
+
+output "ecs_cluster_name" {
+  description = "The name of the ECS cluster"
+  value       = module.ecs.cluster_name
 }

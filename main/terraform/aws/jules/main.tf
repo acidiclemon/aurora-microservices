@@ -2,241 +2,316 @@ provider "aws" {
   region = var.region
 }
 
-module "vpc" {
-  source             = "./modules/vpc"
-  cidr_block         = var.cidr_block
-  public_subnets     = var.public_subnets
-  private_subnets    = var.private_subnets
-  availability_zones = var.availability_zones
+locals {
+  cluster_name = "microservices-cluster"
+
+  services = {
+    adservice = {
+      port = 9555
+    }
+    cartservice = {
+      port = 7070
+      env = [
+        { name = "REDIS_ADDR", value = "${module.redis.cluster_cache_nodes[0].address}:${module.redis.cluster_cache_nodes[0].port}" }
+      ]
+    }
+    checkoutservice = {
+      port = 5050
+      env = [
+        { name = "PORT", value = "5050" },
+        { name = "PRODUCT_CATALOG_SERVICE_ADDR", value = "productcatalogservice.local:3550" },
+        { name = "SHIPPING_SERVICE_ADDR", value = "shippingservice.local:50051" },
+        { name = "PAYMENT_SERVICE_ADDR", value = "paymentservice.local:50051" },
+        { name = "EMAIL_SERVICE_ADDR", value = "emailservice.local:8080" },
+        { name = "CURRENCY_SERVICE_ADDR", value = "currencyservice.local:7000" },
+        { name = "CART_SERVICE_ADDR", value = "cartservice.local:7070" }
+      ]
+    }
+    currencyservice = {
+      port = 7000
+    }
+    emailservice = {
+      port = 8080
+    }
+    paymentservice = {
+      port = 50051
+    }
+    productcatalogservice = {
+      port = 3550
+    }
+    recommendationservice = {
+      port = 8080
+      env = [
+        { name = "PORT", value = "8080" },
+        { name = "PRODUCT_CATALOG_SERVICE_ADDR", value = "productcatalogservice.local:3550" }
+      ]
+    }
+    shippingservice = {
+      port = 50051
+    }
+    loadgenerator = {
+      # No port needed for service definition, but task needs envs
+      container_port = 80 # dummy port
+      env = [
+        { name = "FRONTEND_ADDR", value = module.alb.dns_name },
+        { name = "USERS", value = "10" }
+      ]
+    }
+    # Shopping Assistant is skipped/commented out logic handled by not including it here
+  }
 }
 
+################################################################################
+# VPC
+################################################################################
+
+module "vpc" {
+  source  = "terraform-aws-modules/vpc/aws"
+  version = "~> 5.0"
+
+  name = "microservices-vpc"
+  cidr = var.cidr_block
+
+  azs             = var.availability_zones
+  private_subnets = var.private_subnets
+  public_subnets  = var.public_subnets
+
+  enable_nat_gateway = true
+  single_nat_gateway = true # Save cost/time for demo
+
+  tags = {
+    Environment = "dev"
+    Project     = "microservices"
+  }
+}
+
+################################################################################
+# Security Groups
+################################################################################
+
 module "alb_sg" {
-  source = "./modules/alb_sg"
-  vpc_id = module.vpc.vpc_id
+  source  = "terraform-aws-modules/security-group/aws"
+  version = "~> 5.0"
+
+  name        = "alb-sg"
+  description = "Security group for ALB"
+  vpc_id      = module.vpc.vpc_id
+
+  ingress_cidr_blocks = ["0.0.0.0/0"]
+  ingress_rules       = ["http-80-tcp"]
+  egress_rules        = ["all-all"]
 }
 
 module "ecs_sg" {
-  source    = "./modules/ecs_sg"
-  vpc_id    = module.vpc.vpc_id
-  alb_sg_id = module.alb_sg.security_group_id
+  source  = "terraform-aws-modules/security-group/aws"
+  version = "~> 5.0"
+
+  name        = "ecs-instances-sg"
+  description = "Security group for ECS instances"
+  vpc_id      = module.vpc.vpc_id
+
+  computed_ingress_with_source_security_group_id = [
+    {
+      rule                     = "all-all"
+      source_security_group_id = module.alb_sg.security_group_id
+    }
+  ]
+  number_of_computed_ingress_with_source_security_group_id = 1
+
+  ingress_with_self = [
+    {
+      rule = "all-all"
+    }
+  ]
+  egress_rules = ["all-all"]
 }
 
-module "ecs_instance_role" {
-  source = "./modules/ecs_instance_role"
+module "redis_sg" {
+  source  = "terraform-aws-modules/security-group/aws"
+  version = "~> 5.0"
+
+  name        = "redis-sg"
+  description = "Security group for Redis"
+  vpc_id      = module.vpc.vpc_id
+
+  computed_ingress_with_source_security_group_id = [
+    {
+      from_port                = 6379
+      to_port                  = 6379
+      protocol                 = "tcp"
+      source_security_group_id = module.ecs_sg.security_group_id
+    }
+  ]
+  number_of_computed_ingress_with_source_security_group_id = 1
+
+  egress_rules = ["all-all"]
 }
 
-module "ecs_task_roles" {
-  source = "./modules/ecs_task_roles"
-}
-
-module "launch_template" {
-  source                   = "./modules/launch_template"
-  name_prefix              = "ecs-lt-"
-  image_id                 = data.aws_ssm_parameter.ecs_optimized_ami.value
-  instance_type            = "t3.medium"
-  iam_instance_profile_arn = module.ecs_instance_role.iam_instance_profile_arn
-  security_group_ids       = [module.ecs_sg.security_group_id]
-  cluster_name             = "microservices-cluster"
-}
-
-module "asg" {
-  source                  = "./modules/asg"
-  name                    = "ecs-asg"
-  launch_template_id      = module.launch_template.id
-  launch_template_version = module.launch_template.latest_version
-  subnet_ids              = module.vpc.private_subnets
-  min_size                = 1
-  max_size                = 5
-  desired_capacity        = 2
-}
-
-module "ecs_cluster" {
-  source = "./modules/ecs_cluster"
-  name   = "microservices-cluster"
-  vpc_id = module.vpc.vpc_id
-}
-
-module "capacity_provider" {
-  source                 = "./modules/capacity_provider"
-  name                   = "microservices-capacity-provider"
-  auto_scaling_group_arn = module.asg.arn
-  cluster_name           = module.ecs_cluster.name
-}
+################################################################################
+# ALB
+################################################################################
 
 module "alb" {
-  source             = "./modules/alb"
-  name               = "microservices-alb"
-  subnet_ids         = module.vpc.public_subnets
-  security_group_ids = [module.alb_sg.security_group_id]
-}
+  source  = "terraform-aws-modules/alb/aws"
+  version = "~> 9.0"
 
-module "log_group" {
-  source = "./modules/log_group"
-  name   = "/ecs/microservices"
-}
+  name    = "microservices-alb"
+  vpc_id  = module.vpc.vpc_id
+  subnets = module.vpc.public_subnets
 
-module "redis" {
-  source     = "./modules/redis"
-  vpc_id     = module.vpc.vpc_id
-  subnet_ids = module.vpc.private_subnets
-  ecs_sg_id  = module.ecs_sg.security_group_id
-}
+  security_groups = [module.alb_sg.security_group_id]
 
-resource "aws_iam_service_linked_role" "autoscaling" {
-  aws_service_name = "autoscaling.amazonaws.com"
-  description      = "A service linked role for autoscaling"
-  custom_suffix    = "microservices"
-  # This ensures we don't conflict with the default role if it exists,
-  # but creates a specific one for this deployment if needed.
-  # However, ASG usually uses the default SLR.
-  # If the default SLR is missing, ASG creation might fail or instance launch fails.
-}
+  enable_deletion_protection = false
 
-# --- Service Discovery Definitions ---
-resource "aws_service_discovery_service" "adservice" {
-  name = "adservice"
-  dns_config {
-    namespace_id = module.ecs_cluster.service_discovery_namespace_id
-    dns_records {
-      ttl  = 10
-      type = "A"
+  listeners = {
+    http = {
+      port     = 80
+      protocol = "HTTP"
+      forward = {
+        target_group_key = "frontend"
+      }
+    }
+  }
+
+  target_groups = {
+    frontend = {
+      name_prefix      = "front"
+      backend_protocol = "HTTP"
+      backend_port     = 8080
+      target_type      = "ip"
+      health_check = {
+        path = "/_healthz"
+      }
     }
   }
 }
 
-resource "aws_service_discovery_service" "cartservice" {
-  name = "cartservice"
-  dns_config {
-    namespace_id = module.ecs_cluster.service_discovery_namespace_id
-    dns_records {
-      ttl  = 10
-      type = "A"
+################################################################################
+# ECS Cluster & Capacity Providers
+################################################################################
+
+module "ecs" {
+  source  = "terraform-aws-modules/ecs/aws"
+  version = "~> 5.11"
+
+  cluster_name = local.cluster_name
+
+  # Capacity Provider
+  default_capacity_provider_use_fargate = false
+  autoscaling_capacity_providers = {
+    microservices = {
+      auto_scaling_group_arn         = module.autoscaling.autoscaling_group_arn
+      managed_termination_protection = "DISABLED"
+
+      managed_scaling = {
+        maximum_scaling_step_size = 5
+        minimum_scaling_step_size = 1
+        status                    = "ENABLED"
+        target_capacity           = 100
+      }
+
+      default_capacity_provider_strategy = {
+        weight = 100
+        base   = 1
+      }
     }
   }
 }
 
-resource "aws_service_discovery_service" "checkoutservice" {
-  name = "checkoutservice"
+module "autoscaling" {
+  source  = "terraform-aws-modules/autoscaling/aws"
+  version = "~> 8.0"
+
+  name = "ecs-asg"
+
+  image_id      = data.aws_ssm_parameter.ecs_optimized_ami.value
+  instance_type = "t3.medium"
+
+  security_groups             = [module.ecs_sg.security_group_id]
+  user_data                   = base64encode("#!/bin/bash\necho ECS_CLUSTER=${local.cluster_name} >> /etc/ecs/ecs.config")
+  ignore_desired_capacity_changes = true
+
+  create_iam_instance_profile = true
+  iam_role_name               = "ecs-instance-role-custom"
+  iam_role_description        = "ECS role for ${local.cluster_name}"
+  iam_role_policies = {
+    AmazonEC2ContainerServiceforEC2Role = "arn:aws:iam::aws:policy/service-role/AmazonEC2ContainerServiceforEC2Role"
+    AmazonSSMManagedInstanceCore        = "arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore"
+  }
+
+  vpc_zone_identifier = module.vpc.private_subnets
+  health_check_type   = "EC2"
+  min_size            = 1
+  max_size            = 5
+  desired_capacity    = 2
+
+  # https://github.com/hashicorp/terraform-provider-aws/issues/12582
+  autoscaling_group_tags = {
+    AmazonECSManaged = true
+  }
+}
+
+################################################################################
+# Service Discovery
+################################################################################
+
+resource "aws_service_discovery_private_dns_namespace" "this" {
+  name        = "local"
+  description = "Private DNS namespace for ECS services"
+  vpc         = module.vpc.vpc_id
+}
+
+resource "aws_service_discovery_service" "this" {
+  for_each = local.services
+
+  name = each.key
+
   dns_config {
-    namespace_id = module.ecs_cluster.service_discovery_namespace_id
+    namespace_id = aws_service_discovery_private_dns_namespace.this.id
+
     dns_records {
       ttl  = 10
       type = "A"
     }
+
+    routing_policy = "MULTIVALUE"
+  }
+
+  health_check_custom_config {
+    failure_threshold = 1
   }
 }
 
-resource "aws_service_discovery_service" "currencyservice" {
-  name = "currencyservice"
-  dns_config {
-    namespace_id = module.ecs_cluster.service_discovery_namespace_id
-    dns_records {
-      ttl  = 10
-      type = "A"
-    }
-  }
-}
+# Shopping Assistant Discovery (Commented out)
+# resource "aws_service_discovery_service" "shoppingassistantservice" { ... }
 
-resource "aws_service_discovery_service" "emailservice" {
-  name = "emailservice"
-  dns_config {
-    namespace_id = module.ecs_cluster.service_discovery_namespace_id
-    dns_records {
-      ttl  = 10
-      type = "A"
-    }
-  }
-}
 
-resource "aws_service_discovery_service" "paymentservice" {
-  name = "paymentservice"
-  dns_config {
-    namespace_id = module.ecs_cluster.service_discovery_namespace_id
-    dns_records {
-      ttl  = 10
-      type = "A"
-    }
-  }
-}
+################################################################################
+# ECS Services
+################################################################################
 
-resource "aws_service_discovery_service" "productcatalogservice" {
-  name = "productcatalogservice"
-  dns_config {
-    namespace_id = module.ecs_cluster.service_discovery_namespace_id
-    dns_records {
-      ttl  = 10
-      type = "A"
-    }
-  }
-}
+# Frontend Service
+module "frontend" {
+  source  = "terraform-aws-modules/ecs/aws//modules/service"
+  version = "~> 5.11"
 
-resource "aws_service_discovery_service" "recommendationservice" {
-  name = "recommendationservice"
-  dns_config {
-    namespace_id = module.ecs_cluster.service_discovery_namespace_id
-    dns_records {
-      ttl  = 10
-      type = "A"
-    }
-  }
-}
+  name        = "frontend"
+  cluster_arn = module.ecs.cluster_arn
 
-resource "aws_service_discovery_service" "shippingservice" {
-  name = "shippingservice"
-  dns_config {
-    namespace_id = module.ecs_cluster.service_discovery_namespace_id
-    dns_records {
-      ttl  = 10
-      type = "A"
-    }
-  }
-}
+  cpu          = 256
+  memory       = 512
+  network_mode = "awsvpc"
 
-# resource "aws_service_discovery_service" "shoppingassistantservice" {
-#   name = "shoppingassistantservice"
-#   dns_config {
-#     namespace_id = module.ecs_cluster.service_discovery_namespace_id
-#     dns_records {
-#       ttl  = 10
-#       type = "A"
-#     }
-#   }
-# }
-
-# --- Frontend Service (Public) ---
-
-module "target_group_frontend" {
-  source   = "./modules/target_group"
-  name     = "frontend-tg"
-  port     = 8080
-  protocol = "HTTP"
-  vpc_id   = module.vpc.vpc_id
-  health_check_path = "/_healthz"
-}
-
-module "listener_frontend" {
-  source           = "./modules/listener"
-  alb_arn          = module.alb.arn
-  port             = 80
-  target_group_arn = module.target_group_frontend.arn
-}
-
-module "task_definition_frontend" {
-  source             = "./modules/task_definition"
-  family             = "frontend"
-  execution_role_arn = module.ecs_task_roles.execution_role_arn
-  task_role_arn      = module.ecs_task_roles.task_role_arn
-  cpu                = "256"
-  memory             = "512"
-  container_definitions = jsonencode([
-    {
-      name      = "frontend"
+  container_definitions = {
+    frontend = {
       image     = "${var.image_repo_url}/frontend:${var.image_tag}"
       essential = true
-      portMappings = [
+      port_mappings = [
         {
+          name          = "frontend-8080-tcp"
           containerPort = 8080
           hostPort      = 8080
+          protocol      = "tcp"
         }
       ]
       environment = [
@@ -250,543 +325,114 @@ module "task_definition_frontend" {
         { name = "AD_SERVICE_ADDR", value = "adservice.local:9555" },
         { name = "SHOPPING_ASSISTANT_SERVICE_ADDR", value = "shoppingassistantservice.local:8080" }
       ]
-      logConfiguration = {
-        logDriver = "awslogs"
-        options = {
-          "awslogs-group"         = module.log_group.name
-          "awslogs-region"        = var.region
-          "awslogs-stream-prefix" = "frontend"
-        }
-      }
+      # Using CloudWatch log group created by the module
+      enable_cloudwatch_logging = true
     }
-  ])
+  }
+
+  load_balancer = {
+    service = {
+      target_group_arn = module.alb.target_groups["frontend"].arn
+      container_name   = "frontend"
+      container_port   = 8080
+    }
+  }
+
+  subnet_ids         = module.vpc.private_subnets
+  security_group_ids = [module.ecs_sg.security_group_id]
+
+  force_delete = true
 }
 
-module "ecs_service_frontend" {
-  source                 = "./modules/ecs_service"
-  name                   = "frontend"
-  cluster_id             = module.ecs_cluster.id
-  task_definition_arn    = module.task_definition_frontend.arn
-  desired_count          = 1
-  subnet_ids             = module.vpc.private_subnets
-  security_group_ids     = [module.ecs_sg.security_group_id]
-  capacity_provider_name = module.capacity_provider.name
-  target_group_arn       = module.target_group_frontend.arn
-  container_name         = "frontend"
-  container_port         = 8080
-}
+# Backend Services (Loop)
+module "microservices" {
+  source  = "terraform-aws-modules/ecs/aws//modules/service"
+  version = "~> 5.11"
 
-# --- Backend Services (Internal) ---
+  for_each = local.services
 
-module "task_definition_adservice" {
-  source             = "./modules/task_definition"
-  family             = "adservice"
-  execution_role_arn = module.ecs_task_roles.execution_role_arn
-  task_role_arn      = module.ecs_task_roles.task_role_arn
-  cpu                = "256"
-  memory             = "512"
-  container_definitions = jsonencode([
-    {
-      name      = "adservice"
-      image     = "${var.image_repo_url}/adservice:${var.image_tag}"
+  name        = each.key
+  cluster_arn = module.ecs.cluster_arn
+
+  cpu          = 256
+  memory       = 512
+  network_mode = "awsvpc"
+
+  container_definitions = {
+    (each.key) = {
+      image     = "${var.image_repo_url}/${each.key}:${var.image_tag}"
       essential = true
-      portMappings = [
+      port_mappings = try(each.value.port, null) != null ? [
         {
-          containerPort = 9555
-          hostPort      = 9555
+          name          = "${each.key}-${each.value.port}-tcp"
+          containerPort = each.value.port
+          hostPort      = each.value.port
+          protocol      = "tcp"
         }
-      ]
-      environment = [
-        { name = "PORT", value = "9555" }
-      ]
-      logConfiguration = {
-        logDriver = "awslogs"
-        options = {
-          "awslogs-group"         = module.log_group.name
-          "awslogs-region"        = var.region
-          "awslogs-stream-prefix" = "adservice"
-        }
-      }
+      ] : []
+
+      environment = concat(
+        [
+          { name = "PORT", value = tostring(try(each.value.port, "")) }
+        ],
+        try(each.value.env, [])
+      )
+
+      enable_cloudwatch_logging = true
     }
-  ])
-}
+  }
 
-module "ecs_service_adservice" {
-  source                 = "./modules/ecs_service"
-  name                   = "adservice"
-  cluster_id             = module.ecs_cluster.id
-  task_definition_arn    = module.task_definition_adservice.arn
-  desired_count          = 1
-  subnet_ids             = module.vpc.private_subnets
-  security_group_ids     = [module.ecs_sg.security_group_id]
-  capacity_provider_name = module.capacity_provider.name
-  service_registry_arn   = aws_service_discovery_service.adservice.arn
-}
-
-module "task_definition_cartservice" {
-  source             = "./modules/task_definition"
-  family             = "cartservice"
-  execution_role_arn = module.ecs_task_roles.execution_role_arn
-  task_role_arn      = module.ecs_task_roles.task_role_arn
-  cpu                = "256"
-  memory             = "512"
-  container_definitions = jsonencode([
-    {
-      name      = "cartservice"
-      image     = "${var.image_repo_url}/cartservice:${var.image_tag}"
-      essential = true
-      portMappings = [
-        {
-          containerPort = 7070
-          hostPort      = 7070
-        }
-      ]
-      environment = [
-        { name = "REDIS_ADDR", value = "${module.redis.endpoint}:${module.redis.port}" }
-      ]
-      logConfiguration = {
-        logDriver = "awslogs"
-        options = {
-          "awslogs-group"         = module.log_group.name
-          "awslogs-region"        = var.region
-          "awslogs-stream-prefix" = "cartservice"
-        }
-      }
+  service_registries = {
+    registry = {
+      registry_arn = aws_service_discovery_service.this[each.key].arn
     }
-  ])
+  }
+
+  subnet_ids         = module.vpc.private_subnets
+  security_group_ids = [module.ecs_sg.security_group_id]
+
+  force_delete = true
 }
 
-module "ecs_service_cartservice" {
-  source                 = "./modules/ecs_service"
-  name                   = "cartservice"
-  cluster_id             = module.ecs_cluster.id
-  task_definition_arn    = module.task_definition_cartservice.arn
-  desired_count          = 1
-  subnet_ids             = module.vpc.private_subnets
-  security_group_ids     = [module.ecs_sg.security_group_id]
-  capacity_provider_name = module.capacity_provider.name
-  service_registry_arn   = aws_service_discovery_service.cartservice.arn
+################################################################################
+# Redis
+################################################################################
+
+module "redis" {
+  source = "terraform-aws-modules/elasticache/aws"
+  # Check version compatibility, using 1.0.0 or similar usually
+
+  cluster_id               = "redis-cart"
+  create_cluster           = true
+  create_replication_group = false
+
+  engine          = "redis"
+  node_type       = "cache.t2.micro"
+  num_cache_nodes = 1
+  engine_version  = "7.0"
+  port            = 6379
+
+  subnet_ids         = module.vpc.private_subnets
+  vpc_id             = module.vpc.vpc_id
+  security_group_ids = [module.redis_sg.security_group_id]
+
+  parameter_group_name = "default.redis7"
 }
 
-module "task_definition_checkoutservice" {
-  source             = "./modules/task_definition"
-  family             = "checkoutservice"
-  execution_role_arn = module.ecs_task_roles.execution_role_arn
-  task_role_arn      = module.ecs_task_roles.task_role_arn
-  cpu                = "256"
-  memory             = "512"
-  container_definitions = jsonencode([
-    {
-      name      = "checkoutservice"
-      image     = "${var.image_repo_url}/checkoutservice:${var.image_tag}"
-      essential = true
-      portMappings = [
-        {
-          containerPort = 5050
-          hostPort      = 5050
-        }
-      ]
-      environment = [
-        { name = "PORT", value = "5050" },
-        { name = "PRODUCT_CATALOG_SERVICE_ADDR", value = "productcatalogservice.local:3550" },
-        { name = "SHIPPING_SERVICE_ADDR", value = "shippingservice.local:50051" },
-        { name = "PAYMENT_SERVICE_ADDR", value = "paymentservice.local:50051" },
-        { name = "EMAIL_SERVICE_ADDR", value = "emailservice.local:8080" },
-        { name = "CURRENCY_SERVICE_ADDR", value = "currencyservice.local:7000" },
-        { name = "CART_SERVICE_ADDR", value = "cartservice.local:7070" }
-      ]
-      logConfiguration = {
-        logDriver = "awslogs"
-        options = {
-          "awslogs-group"         = module.log_group.name
-          "awslogs-region"        = var.region
-          "awslogs-stream-prefix" = "checkoutservice"
-        }
-      }
-    }
-  ])
-}
+################################################################################
+# Route53
+################################################################################
 
-module "ecs_service_checkoutservice" {
-  source                 = "./modules/ecs_service"
-  name                   = "checkoutservice"
-  cluster_id             = module.ecs_cluster.id
-  task_definition_arn    = module.task_definition_checkoutservice.arn
-  desired_count          = 1
-  subnet_ids             = module.vpc.private_subnets
-  security_group_ids     = [module.ecs_sg.security_group_id]
-  capacity_provider_name = module.capacity_provider.name
-  service_registry_arn   = aws_service_discovery_service.checkoutservice.arn
-}
+resource "aws_route53_record" "this" {
+  count = var.domain_name != "" && var.hosted_zone_id != "" ? 1 : 0
 
-module "task_definition_currencyservice" {
-  source             = "./modules/task_definition"
-  family             = "currencyservice"
-  execution_role_arn = module.ecs_task_roles.execution_role_arn
-  task_role_arn      = module.ecs_task_roles.task_role_arn
-  cpu                = "256"
-  memory             = "512"
-  container_definitions = jsonencode([
-    {
-      name      = "currencyservice"
-      image     = "${var.image_repo_url}/currencyservice:${var.image_tag}"
-      essential = true
-      portMappings = [
-        {
-          containerPort = 7000
-          hostPort      = 7000
-        }
-      ]
-      environment = [
-        { name = "PORT", value = "7000" }
-      ]
-      logConfiguration = {
-        logDriver = "awslogs"
-        options = {
-          "awslogs-group"         = module.log_group.name
-          "awslogs-region"        = var.region
-          "awslogs-stream-prefix" = "currencyservice"
-        }
-      }
-    }
-  ])
-}
+  zone_id = var.hosted_zone_id
+  name    = var.domain_name
+  type    = "A"
 
-module "ecs_service_currencyservice" {
-  source                 = "./modules/ecs_service"
-  name                   = "currencyservice"
-  cluster_id             = module.ecs_cluster.id
-  task_definition_arn    = module.task_definition_currencyservice.arn
-  desired_count          = 1
-  subnet_ids             = module.vpc.private_subnets
-  security_group_ids     = [module.ecs_sg.security_group_id]
-  capacity_provider_name = module.capacity_provider.name
-  service_registry_arn   = aws_service_discovery_service.currencyservice.arn
-}
-
-module "task_definition_emailservice" {
-  source             = "./modules/task_definition"
-  family             = "emailservice"
-  execution_role_arn = module.ecs_task_roles.execution_role_arn
-  task_role_arn      = module.ecs_task_roles.task_role_arn
-  cpu                = "256"
-  memory             = "512"
-  container_definitions = jsonencode([
-    {
-      name      = "emailservice"
-      image     = "${var.image_repo_url}/emailservice:${var.image_tag}"
-      essential = true
-      portMappings = [
-        {
-          containerPort = 8080
-          hostPort      = 8080
-        }
-      ]
-      environment = [
-        { name = "PORT", value = "8080" }
-      ]
-      logConfiguration = {
-        logDriver = "awslogs"
-        options = {
-          "awslogs-group"         = module.log_group.name
-          "awslogs-region"        = var.region
-          "awslogs-stream-prefix" = "emailservice"
-        }
-      }
-    }
-  ])
-}
-
-module "ecs_service_emailservice" {
-  source                 = "./modules/ecs_service"
-  name                   = "emailservice"
-  cluster_id             = module.ecs_cluster.id
-  task_definition_arn    = module.task_definition_emailservice.arn
-  desired_count          = 1
-  subnet_ids             = module.vpc.private_subnets
-  security_group_ids     = [module.ecs_sg.security_group_id]
-  capacity_provider_name = module.capacity_provider.name
-  service_registry_arn   = aws_service_discovery_service.emailservice.arn
-}
-
-module "task_definition_paymentservice" {
-  source             = "./modules/task_definition"
-  family             = "paymentservice"
-  execution_role_arn = module.ecs_task_roles.execution_role_arn
-  task_role_arn      = module.ecs_task_roles.task_role_arn
-  cpu                = "256"
-  memory             = "512"
-  container_definitions = jsonencode([
-    {
-      name      = "paymentservice"
-      image     = "${var.image_repo_url}/paymentservice:${var.image_tag}"
-      essential = true
-      portMappings = [
-        {
-          containerPort = 50051
-          hostPort      = 50051
-        }
-      ]
-      environment = [
-        { name = "PORT", value = "50051" }
-      ]
-      logConfiguration = {
-        logDriver = "awslogs"
-        options = {
-          "awslogs-group"         = module.log_group.name
-          "awslogs-region"        = var.region
-          "awslogs-stream-prefix" = "paymentservice"
-        }
-      }
-    }
-  ])
-}
-
-module "ecs_service_paymentservice" {
-  source                 = "./modules/ecs_service"
-  name                   = "paymentservice"
-  cluster_id             = module.ecs_cluster.id
-  task_definition_arn    = module.task_definition_paymentservice.arn
-  desired_count          = 1
-  subnet_ids             = module.vpc.private_subnets
-  security_group_ids     = [module.ecs_sg.security_group_id]
-  capacity_provider_name = module.capacity_provider.name
-  service_registry_arn   = aws_service_discovery_service.paymentservice.arn
-}
-
-module "task_definition_productcatalogservice" {
-  source             = "./modules/task_definition"
-  family             = "productcatalogservice"
-  execution_role_arn = module.ecs_task_roles.execution_role_arn
-  task_role_arn      = module.ecs_task_roles.task_role_arn
-  cpu                = "256"
-  memory             = "512"
-  container_definitions = jsonencode([
-    {
-      name      = "productcatalogservice"
-      image     = "${var.image_repo_url}/productcatalogservice:${var.image_tag}"
-      essential = true
-      portMappings = [
-        {
-          containerPort = 3550
-          hostPort      = 3550
-        }
-      ]
-      environment = [
-        { name = "PORT", value = "3550" }
-      ]
-      logConfiguration = {
-        logDriver = "awslogs"
-        options = {
-          "awslogs-group"         = module.log_group.name
-          "awslogs-region"        = var.region
-          "awslogs-stream-prefix" = "productcatalogservice"
-        }
-      }
-    }
-  ])
-}
-
-module "ecs_service_productcatalogservice" {
-  source                 = "./modules/ecs_service"
-  name                   = "productcatalogservice"
-  cluster_id             = module.ecs_cluster.id
-  task_definition_arn    = module.task_definition_productcatalogservice.arn
-  desired_count          = 1
-  subnet_ids             = module.vpc.private_subnets
-  security_group_ids     = [module.ecs_sg.security_group_id]
-  capacity_provider_name = module.capacity_provider.name
-  service_registry_arn   = aws_service_discovery_service.productcatalogservice.arn
-}
-
-module "task_definition_recommendationservice" {
-  source             = "./modules/task_definition"
-  family             = "recommendationservice"
-  execution_role_arn = module.ecs_task_roles.execution_role_arn
-  task_role_arn      = module.ecs_task_roles.task_role_arn
-  cpu                = "256"
-  memory             = "512"
-  container_definitions = jsonencode([
-    {
-      name      = "recommendationservice"
-      image     = "${var.image_repo_url}/recommendationservice:${var.image_tag}"
-      essential = true
-      portMappings = [
-        {
-          containerPort = 8080
-          hostPort      = 8080
-        }
-      ]
-      environment = [
-        { name = "PORT", value = "8080" },
-        { name = "PRODUCT_CATALOG_SERVICE_ADDR", value = "productcatalogservice.local:3550" }
-      ]
-      logConfiguration = {
-        logDriver = "awslogs"
-        options = {
-          "awslogs-group"         = module.log_group.name
-          "awslogs-region"        = var.region
-          "awslogs-stream-prefix" = "recommendationservice"
-        }
-      }
-    }
-  ])
-}
-
-module "ecs_service_recommendationservice" {
-  source                 = "./modules/ecs_service"
-  name                   = "recommendationservice"
-  cluster_id             = module.ecs_cluster.id
-  task_definition_arn    = module.task_definition_recommendationservice.arn
-  desired_count          = 1
-  subnet_ids             = module.vpc.private_subnets
-  security_group_ids     = [module.ecs_sg.security_group_id]
-  capacity_provider_name = module.capacity_provider.name
-  service_registry_arn   = aws_service_discovery_service.recommendationservice.arn
-}
-
-module "task_definition_shippingservice" {
-  source             = "./modules/task_definition"
-  family             = "shippingservice"
-  execution_role_arn = module.ecs_task_roles.execution_role_arn
-  task_role_arn      = module.ecs_task_roles.task_role_arn
-  cpu                = "256"
-  memory             = "512"
-  container_definitions = jsonencode([
-    {
-      name      = "shippingservice"
-      image     = "${var.image_repo_url}/shippingservice:${var.image_tag}"
-      essential = true
-      portMappings = [
-        {
-          containerPort = 50051
-          hostPort      = 50051
-        }
-      ]
-      environment = [
-        { name = "PORT", value = "50051" }
-      ]
-      logConfiguration = {
-        logDriver = "awslogs"
-        options = {
-          "awslogs-group"         = module.log_group.name
-          "awslogs-region"        = var.region
-          "awslogs-stream-prefix" = "shippingservice"
-        }
-      }
-    }
-  ])
-}
-
-module "ecs_service_shippingservice" {
-  source                 = "./modules/ecs_service"
-  name                   = "shippingservice"
-  cluster_id             = module.ecs_cluster.id
-  task_definition_arn    = module.task_definition_shippingservice.arn
-  desired_count          = 1
-  subnet_ids             = module.vpc.private_subnets
-  security_group_ids     = [module.ecs_sg.security_group_id]
-  capacity_provider_name = module.capacity_provider.name
-  service_registry_arn   = aws_service_discovery_service.shippingservice.arn
-}
-
-# module "task_definition_shoppingassistantservice" {
-#   source             = "./modules/task_definition"
-#   family             = "shoppingassistantservice"
-#   execution_role_arn = module.ecs_task_roles.execution_role_arn
-#   task_role_arn      = module.ecs_task_roles.task_role_arn
-#   cpu                = "256"
-#   memory             = "512"
-#   container_definitions = jsonencode([
-#     {
-#       name      = "shoppingassistantservice"
-#       image     = "${var.image_repo_url}/shoppingassistantservice:${var.image_tag}"
-#       essential = true
-#       portMappings = [
-#         {
-#           containerPort = 8080
-#           hostPort      = 8080
-#         }
-#       ]
-#       environment = [
-#         { name = "PROJECT_ID", value = var.shopping_assistant_gcp_project_id },
-#         { name = "REGION", value = var.shopping_assistant_gcp_region },
-#         { name = "ALLOYDB_DATABASE_NAME", value = var.shopping_assistant_alloydb_database },
-#         { name = "ALLOYDB_TABLE_NAME", value = var.shopping_assistant_alloydb_table },
-#         { name = "ALLOYDB_CLUSTER_NAME", value = var.shopping_assistant_alloydb_cluster },
-#         { name = "ALLOYDB_INSTANCE_NAME", value = var.shopping_assistant_alloydb_instance },
-#         { name = "ALLOYDB_SECRET_NAME", value = var.shopping_assistant_alloydb_secret }
-#       ]
-#       logConfiguration = {
-#         logDriver = "awslogs"
-#         options = {
-#           "awslogs-group"         = module.log_group.name
-#           "awslogs-region"        = var.region
-#           "awslogs-stream-prefix" = "shoppingassistantservice"
-#         }
-#       }
-#     }
-#   ])
-# }
-
-# module "ecs_service_shoppingassistantservice" {
-#   source                 = "./modules/ecs_service"
-#   name                   = "shoppingassistantservice"
-#   cluster_id             = module.ecs_cluster.id
-#   task_definition_arn    = module.task_definition_shoppingassistantservice.arn
-#   desired_count          = 1
-#   subnet_ids             = module.vpc.private_subnets
-#   security_group_ids     = [module.ecs_sg.security_group_id]
-#   capacity_provider_name = module.capacity_provider.name
-#   service_registry_arn   = aws_service_discovery_service.shoppingassistantservice.arn
-# }
-
-# --- Load Generator ---
-
-module "task_definition_loadgenerator" {
-  source             = "./modules/task_definition"
-  family             = "loadgenerator"
-  execution_role_arn = module.ecs_task_roles.execution_role_arn
-  task_role_arn      = module.ecs_task_roles.task_role_arn
-  cpu                = "256"
-  memory             = "512"
-  container_definitions = jsonencode([
-    {
-      name      = "loadgenerator"
-      image     = "${var.image_repo_url}/loadgenerator:${var.image_tag}"
-      essential = true
-      environment = [
-        { name = "FRONTEND_ADDR", value = module.alb.dns_name }, # Point to ALB
-        { name = "USERS", value = "10" }
-      ]
-      logConfiguration = {
-        logDriver = "awslogs"
-        options = {
-          "awslogs-group"         = module.log_group.name
-          "awslogs-region"        = var.region
-          "awslogs-stream-prefix" = "loadgenerator"
-        }
-      }
-    }
-  ])
-}
-
-module "ecs_service_loadgenerator" {
-  source                 = "./modules/ecs_service"
-  name                   = "loadgenerator"
-  cluster_id             = module.ecs_cluster.id
-  task_definition_arn    = module.task_definition_loadgenerator.arn
-  desired_count          = 1
-  subnet_ids             = module.vpc.private_subnets
-  security_group_ids     = [module.ecs_sg.security_group_id]
-  capacity_provider_name = module.capacity_provider.name
-}
-
-module "route53" {
-  source       = "./modules/route53"
-  count        = var.domain_name != "" && var.hosted_zone_id != "" ? 1 : 0
-  zone_id      = var.hosted_zone_id
-  name         = var.domain_name
-  alb_dns_name = module.alb.dns_name
-  alb_zone_id  = module.alb.zone_id
+  alias {
+    name                   = module.alb.dns_name
+    zone_id                = module.alb.zone_id
+    evaluate_target_health = true
+  }
 }
