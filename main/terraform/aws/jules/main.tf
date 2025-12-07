@@ -182,6 +182,7 @@ module "alb" {
       health_check = {
         path = "/_healthz"
       }
+      create_attachment = false
     }
   }
 }
@@ -383,7 +384,7 @@ module "microservices" {
   }
 
   service_registries = {
-    registry = {
+    discovery = {
       registry_arn = aws_service_discovery_service.this[each.key].arn
     }
   }
