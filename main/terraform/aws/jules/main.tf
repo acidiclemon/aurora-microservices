@@ -383,11 +383,11 @@ module "microservices" {
     }
   }
 
-  service_registries = {
-    discovery = {
+  service_registries = [
+    {
       registry_arn = aws_service_discovery_service.this[each.key].arn
     }
-  }
+  ]
 
   subnet_ids         = module.vpc.private_subnets
   security_group_ids = [module.ecs_sg.security_group_id]
