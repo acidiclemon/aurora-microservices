@@ -237,7 +237,7 @@ module "autoscaling" {
   mixed_instances_policy = {
     instances_distribution = {
       on_demand_base_capacity                  = 0
-      on_demand_percentage_above_base_capacity = 0
+      on_demand_percentage_above_base_capacity = 50
       spot_allocation_strategy                 = "capacity-optimized"
     }
 
@@ -247,6 +247,12 @@ module "autoscaling" {
       },
       {
         instance_type = "t3a.medium"
+      },
+      {
+        instance_type = "t3.large"
+      },
+      {
+        instance_type = "t3a.large"
       }
     ]
   }
@@ -265,7 +271,7 @@ module "autoscaling" {
 
   vpc_zone_identifier = module.vpc.private_subnets
   health_check_type   = "EC2"
-  min_size            = 1
+  min_size            = 2
   max_size            = 5
   desired_capacity    = 2
 
