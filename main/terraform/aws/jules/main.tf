@@ -29,12 +29,18 @@ locals {
     }
     currencyservice = {
       port = 7000
+      env = [
+        { name = "DISABLE_PROFILER", value = "1" }
+      ]
     }
     emailservice = {
       port = 8080
     }
     paymentservice = {
       port = 50051
+      env = [
+        { name = "DISABLE_PROFILER", value = "1" }
+      ]
     }
     productcatalogservice = {
       port = 3550
