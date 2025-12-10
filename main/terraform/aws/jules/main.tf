@@ -225,8 +225,25 @@ module "autoscaling" {
 
   name = "ecs-asg"
 
-  image_id      = data.aws_ssm_parameter.ecs_optimized_ami.value
-  instance_type = "t3.medium"
+  image_id = data.aws_ssm_parameter.ecs_optimized_ami.value
+
+  use_mixed_instances_policy = true
+  mixed_instances_policy = {
+    instances_distribution = {
+      on_demand_base_capacity                  = 0
+      on_demand_percentage_above_base_capacity = 0
+      spot_allocation_strategy                 = "capacity-optimized"
+    }
+
+    override = [
+      {
+        instance_type = "t3.medium"
+      },
+      {
+        instance_type = "t3a.medium"
+      }
+    ]
+  }
 
   security_groups             = [module.ecs_sg.security_group_id]
   user_data                   = base64encode("#!/bin/bash\necho ECS_CLUSTER=${local.cluster_name} >> /etc/ecs/ecs.config")
