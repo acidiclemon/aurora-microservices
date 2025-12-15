@@ -238,7 +238,7 @@ module "autoscaling" {
     instances_distribution = {
       on_demand_base_capacity                  = 0
       on_demand_percentage_above_base_capacity = 50
-      spot_allocation_strategy                 = "capacity-optimized"
+      spot_allocation_strategy                 = "price-capacity-optimized"
     }
 
     override = [
