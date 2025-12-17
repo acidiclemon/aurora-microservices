@@ -432,8 +432,8 @@ module "microservices" {
 ################################################################################
 
 module "redis" {
-  source = "terraform-aws-modules/elasticache/aws"
-  # Check version compatibility, using 1.0.0 or similar usually
+  source  = "terraform-aws-modules/elasticache/aws"
+  version = "~> 1.2"
 
   cluster_id               = "redis-cart"
   create_cluster           = true
@@ -476,7 +476,8 @@ resource "aws_route53_record" "this" {
 ################################################################################
 
 module "cloudfront" {
-  source = "terraform-aws-modules/cloudfront/aws"
+  source  = "terraform-aws-modules/cloudfront/aws"
+  version = "~> 3.4"
 
   comment             = "CloudFront for Microservices"
   enabled             = true
