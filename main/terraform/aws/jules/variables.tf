@@ -40,6 +40,12 @@ variable "image_tag" {
   default     = "latest"
 }
 
+variable "project_name" {
+  description = "Project name prefix for resources"
+  type        = string
+  default     = "aurora"
+}
+
 variable "shopping_assistant_gcp_project_id" {
   type = string
   default = ""

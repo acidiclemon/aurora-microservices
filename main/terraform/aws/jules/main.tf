@@ -3,7 +3,8 @@ provider "aws" {
 }
 
 locals {
-  cluster_name = "microservices-cluster"
+  cluster_name = "${var.project_name}-cluster"
+  namespace    = "${var.project_name}.local"
 
   services = {
     adservice = {
@@ -19,12 +20,12 @@ locals {
       port = 5050
       env = [
         { name = "PORT", value = "5050" },
-        { name = "PRODUCT_CATALOG_SERVICE_ADDR", value = "productcatalogservice.local:3550" },
-        { name = "SHIPPING_SERVICE_ADDR", value = "shippingservice.local:50051" },
-        { name = "PAYMENT_SERVICE_ADDR", value = "paymentservice.local:50051" },
-        { name = "EMAIL_SERVICE_ADDR", value = "emailservice.local:8080" },
-        { name = "CURRENCY_SERVICE_ADDR", value = "currencyservice.local:7000" },
-        { name = "CART_SERVICE_ADDR", value = "cartservice.local:7070" }
+        { name = "PRODUCT_CATALOG_SERVICE_ADDR", value = "${var.project_name}-productcatalogservice.${var.project_name}.local:3550" },
+        { name = "SHIPPING_SERVICE_ADDR", value = "${var.project_name}-shippingservice.${var.project_name}.local:50051" },
+        { name = "PAYMENT_SERVICE_ADDR", value = "${var.project_name}-paymentservice.${var.project_name}.local:50051" },
+        { name = "EMAIL_SERVICE_ADDR", value = "${var.project_name}-emailservice.${var.project_name}.local:8080" },
+        { name = "CURRENCY_SERVICE_ADDR", value = "${var.project_name}-currencyservice.${var.project_name}.local:7000" },
+        { name = "CART_SERVICE_ADDR", value = "${var.project_name}-cartservice.${var.project_name}.local:7070" }
       ]
     }
     currencyservice = {
@@ -49,7 +50,7 @@ locals {
       port = 8080
       env = [
         { name = "PORT", value = "8080" },
-        { name = "PRODUCT_CATALOG_SERVICE_ADDR", value = "productcatalogservice.local:3550" }
+        { name = "PRODUCT_CATALOG_SERVICE_ADDR", value = "${var.project_name}-productcatalogservice.${var.project_name}.local:3550" }
       ]
     }
     shippingservice = {
@@ -75,7 +76,7 @@ module "vpc" {
   source  = "terraform-aws-modules/vpc/aws"
   version = "~> 5.0"
 
-  name = "microservices-vpc"
+  name = "${var.project_name}-vpc"
   cidr = var.cidr_block
 
   azs             = var.availability_zones
@@ -91,7 +92,7 @@ module "vpc" {
 
   tags = {
     Environment = "dev"
-    Project     = "microservices"
+    Project     = var.project_name
   }
 }
 
@@ -103,7 +104,7 @@ module "alb_sg" {
   source  = "terraform-aws-modules/security-group/aws"
   version = "~> 5.0"
 
-  name        = "alb-sg"
+  name        = "${var.project_name}-alb-sg"
   description = "Security group for ALB"
   vpc_id      = module.vpc.vpc_id
 
@@ -116,7 +117,7 @@ module "ecs_sg" {
   source  = "terraform-aws-modules/security-group/aws"
   version = "~> 5.0"
 
-  name        = "ecs-instances-sg"
+  name        = "${var.project_name}-ecs-sg"
   description = "Security group for ECS instances"
   vpc_id      = module.vpc.vpc_id
 
@@ -140,7 +141,7 @@ module "redis_sg" {
   source  = "terraform-aws-modules/security-group/aws"
   version = "~> 5.0"
 
-  name        = "redis-sg"
+  name        = "${var.project_name}-redis-sg"
   description = "Security group for Redis"
   vpc_id      = module.vpc.vpc_id
 
@@ -165,7 +166,7 @@ module "alb" {
   source  = "terraform-aws-modules/alb/aws"
   version = "~> 9.0"
 
-  name    = "microservices-alb"
+  name    = "${var.project_name}-alb"
   vpc_id  = module.vpc.vpc_id
   subnets = module.vpc.public_subnets
 
@@ -234,7 +235,7 @@ module "autoscaling" {
   source  = "terraform-aws-modules/autoscaling/aws"
   version = "~> 8.0"
 
-  name = "ecs-asg"
+  name = "${var.project_name}-asg"
 
   image_id = data.aws_ssm_parameter.ecs_optimized_ami.value
 
@@ -261,7 +262,7 @@ module "autoscaling" {
   ignore_desired_capacity_changes = true
 
   create_iam_instance_profile = true
-  iam_role_name               = "ecs-instance-role-custom"
+  iam_role_name               = "${var.project_name}-ecs-role"
   iam_role_description        = "ECS role for ${local.cluster_name}"
   iam_role_policies = {
     AmazonEC2ContainerServiceforEC2Role = "arn:aws:iam::aws:policy/service-role/AmazonEC2ContainerServiceforEC2Role"
@@ -285,7 +286,7 @@ module "autoscaling" {
 ################################################################################
 
 resource "aws_service_discovery_private_dns_namespace" "this" {
-  name        = "local"
+  name        = local.namespace
   description = "Private DNS namespace for ECS services"
   vpc         = module.vpc.vpc_id
 }
@@ -293,7 +294,7 @@ resource "aws_service_discovery_private_dns_namespace" "this" {
 resource "aws_service_discovery_service" "this" {
   for_each = local.services
 
-  name = each.key
+  name = "${var.project_name}-${each.key}"
 
   dns_config {
     namespace_id = aws_service_discovery_private_dns_namespace.this.id
@@ -311,10 +312,6 @@ resource "aws_service_discovery_service" "this" {
   }
 }
 
-# Shopping Assistant Discovery (Commented out)
-# resource "aws_service_discovery_service" "shoppingassistantservice" { ... }
-
-
 ################################################################################
 # ECS Services
 ################################################################################
@@ -324,7 +321,7 @@ module "frontend" {
   source  = "terraform-aws-modules/ecs/aws//modules/service"
   version = "~> 5.11"
 
-  name        = "frontend"
+  name        = "${var.project_name}-frontend"
   cluster_arn = module.ecs.cluster_arn
 
   create_tasks_iam_role = false
@@ -348,14 +345,14 @@ module "frontend" {
       ]
       environment = [
         { name = "PORT", value = "8080" },
-        { name = "PRODUCT_CATALOG_SERVICE_ADDR", value = "productcatalogservice.local:3550" },
-        { name = "CURRENCY_SERVICE_ADDR", value = "currencyservice.local:7000" },
-        { name = "CART_SERVICE_ADDR", value = "cartservice.local:7070" },
-        { name = "RECOMMENDATION_SERVICE_ADDR", value = "recommendationservice.local:8080" },
-        { name = "SHIPPING_SERVICE_ADDR", value = "shippingservice.local:50051" },
-        { name = "CHECKOUT_SERVICE_ADDR", value = "checkoutservice.local:5050" },
-        { name = "AD_SERVICE_ADDR", value = "adservice.local:9555" },
-        { name = "SHOPPING_ASSISTANT_SERVICE_ADDR", value = "shoppingassistantservice.local:8080" }
+        { name = "PRODUCT_CATALOG_SERVICE_ADDR", value = "${var.project_name}-productcatalogservice.${var.project_name}.local:3550" },
+        { name = "CURRENCY_SERVICE_ADDR", value = "${var.project_name}-currencyservice.${var.project_name}.local:7000" },
+        { name = "CART_SERVICE_ADDR", value = "${var.project_name}-cartservice.${var.project_name}.local:7070" },
+        { name = "RECOMMENDATION_SERVICE_ADDR", value = "${var.project_name}-recommendationservice.${var.project_name}.local:8080" },
+        { name = "SHIPPING_SERVICE_ADDR", value = "${var.project_name}-shippingservice.${var.project_name}.local:50051" },
+        { name = "CHECKOUT_SERVICE_ADDR", value = "${var.project_name}-checkoutservice.${var.project_name}.local:5050" },
+        { name = "AD_SERVICE_ADDR", value = "${var.project_name}-adservice.${var.project_name}.local:9555" },
+        { name = "SHOPPING_ASSISTANT_SERVICE_ADDR", value = "${var.project_name}-shoppingassistantservice.${var.project_name}.local:8080" }
       ]
       # Using CloudWatch log group created by the module
       enable_cloudwatch_logging = true
@@ -383,7 +380,7 @@ module "microservices" {
 
   for_each = local.services
 
-  name        = each.key
+  name        = "${var.project_name}-${each.key}"
   cluster_arn = module.ecs.cluster_arn
 
   create_tasks_iam_role = false
@@ -435,7 +432,7 @@ module "redis" {
   source  = "terraform-aws-modules/elasticache/aws"
   version = "~> 1.2"
 
-  cluster_id               = "redis-cart"
+  cluster_id               = "${var.project_name}-redis"
   create_cluster           = true
   create_replication_group = false
   create_security_group    = false
@@ -476,7 +473,7 @@ resource "aws_route53_record" "this" {
 ################################################################################
 
 resource "aws_cloudfront_distribution" "this" {
-  comment             = "CloudFront for Microservices"
+  comment             = "CloudFront for ${var.project_name}"
   enabled             = true
   is_ipv6_enabled     = true
   price_class         = "PriceClass_100"
