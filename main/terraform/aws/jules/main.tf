@@ -508,7 +508,6 @@ module "cloudfront" {
     allowed_methods = ["GET", "HEAD", "OPTIONS", "PUT", "POST", "PATCH", "DELETE"]
     cached_methods  = ["GET", "HEAD"]
     compress        = true
-    query_string    = true
 
     # Forward all for dynamic app
     cache_policy_name          = "Managed-CachingDisabled"
