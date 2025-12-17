@@ -85,6 +85,10 @@ module "vpc" {
   enable_nat_gateway = true
   single_nat_gateway = true # Save cost/time for demo
 
+  manage_default_security_group = false
+  manage_default_route_table    = false
+  manage_default_network_acl    = false
+
   tags = {
     Environment = "dev"
     Project     = "microservices"
@@ -168,6 +172,7 @@ module "alb" {
   security_groups = [module.alb_sg.security_group_id]
 
   enable_deletion_protection = false
+  create_security_group = false
 
   listeners = {
     http = {
@@ -236,17 +241,17 @@ module "autoscaling" {
   use_mixed_instances_policy = true
   mixed_instances_policy = {
     instances_distribution = {
-      on_demand_base_capacity                  = 0
+      on_demand_base_capacity                  = 2
       on_demand_percentage_above_base_capacity = 50
       spot_allocation_strategy                 = "price-capacity-optimized"
     }
 
     override = [
       {
-        instance_type = "t3.medium"
+        instance_type = "t3a.medium"
       },
       {
-        instance_type = "t3a.medium"
+        instance_type = "t3.medium"
       }
     ]
   }
@@ -322,6 +327,9 @@ module "frontend" {
   name        = "frontend"
   cluster_arn = module.ecs.cluster_arn
 
+  create_tasks_iam_role = false
+  create_security_group = false
+
   cpu          = 256
   memory       = 512
   network_mode = "awsvpc"
@@ -378,6 +386,9 @@ module "microservices" {
   name        = each.key
   cluster_arn = module.ecs.cluster_arn
 
+  create_tasks_iam_role = false
+  create_security_group = false
+
   cpu          = 256
   memory       = 512
   network_mode = "awsvpc"
@@ -427,6 +438,7 @@ module "redis" {
   cluster_id               = "redis-cart"
   create_cluster           = true
   create_replication_group = false
+  create_security_group    = false
 
   engine          = "redis"
   node_type       = "cache.t3.micro"
