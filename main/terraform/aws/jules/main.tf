@@ -470,3 +470,47 @@ resource "aws_route53_record" "this" {
     evaluate_target_health = true
   }
 }
+
+################################################################################
+# CloudFront
+################################################################################
+
+module "cloudfront" {
+  source = "terraform-aws-modules/cloudfront/aws"
+
+  comment             = "CloudFront for Microservices"
+  enabled             = true
+  is_ipv6_enabled     = true
+  price_class         = "PriceClass_100"
+  retain_on_delete    = false
+  wait_for_deployment = false
+
+  create_origin_access_identity = false
+  create_origin_access_control  = false
+
+  origin = {
+    alb = {
+      domain_name = module.alb.dns_name
+      custom_origin_config = {
+        http_port              = 80
+        https_port             = 443
+        origin_protocol_policy = "http-only"
+        origin_ssl_protocols   = ["TLSv1.2"]
+      }
+    }
+  }
+
+  default_cache_behavior = {
+    target_origin_id       = "alb"
+    viewer_protocol_policy = "allow-all"
+
+    allowed_methods = ["GET", "HEAD", "OPTIONS", "PUT", "POST", "PATCH", "DELETE"]
+    cached_methods  = ["GET", "HEAD"]
+    compress        = true
+    query_string    = true
+
+    # Forward all for dynamic app
+    cache_policy_name          = "Managed-CachingDisabled"
+    origin_request_policy_name = "Managed-AllViewer"
+  }
+}
