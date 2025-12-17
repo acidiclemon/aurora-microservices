@@ -475,10 +475,7 @@ resource "aws_route53_record" "this" {
 # CloudFront
 ################################################################################
 
-module "cloudfront" {
-  source  = "terraform-aws-modules/cloudfront/aws"
-  version = "~> 3.4"
-
+resource "aws_cloudfront_distribution" "this" {
   comment             = "CloudFront for Microservices"
   enabled             = true
   is_ipv6_enabled     = true
@@ -486,22 +483,19 @@ module "cloudfront" {
   retain_on_delete    = false
   wait_for_deployment = false
 
-  create_origin_access_identity = false
-  create_origin_access_control  = false
+  origin {
+    domain_name = module.alb.dns_name
+    origin_id   = "alb"
 
-  origin = {
-    alb = {
-      domain_name = module.alb.dns_name
-      custom_origin_config = {
-        http_port              = 80
-        https_port             = 443
-        origin_protocol_policy = "http-only"
-        origin_ssl_protocols   = ["TLSv1.2"]
-      }
+    custom_origin_config {
+      http_port              = 80
+      https_port             = 443
+      origin_protocol_policy = "http-only"
+      origin_ssl_protocols   = ["TLSv1.2"]
     }
   }
 
-  default_cache_behavior = {
+  default_cache_behavior {
     target_origin_id       = "alb"
     viewer_protocol_policy = "allow-all"
 
@@ -513,5 +507,15 @@ module "cloudfront" {
     cache_policy_id = "4135ea2d-6df8-44a3-9df3-4b5a84be39ad"
     # Managed-AllViewer
     origin_request_policy_id = "216adef6-5c7f-47e4-b989-5492eafa07d3"
+  }
+
+  restrictions {
+    geo_restriction {
+      restriction_type = "none"
+    }
+  }
+
+  viewer_certificate {
+    cloudfront_default_certificate = true
   }
 }
