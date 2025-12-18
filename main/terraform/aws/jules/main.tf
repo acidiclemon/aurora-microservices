@@ -4,7 +4,7 @@ provider "aws" {
 
 locals {
   cluster_name = "${var.project_name}-cluster"
-  namespace    = "${var.project_name}.local"
+  namespace    = "${var.project_name}.private"
 
   services = {
     adservice = {
@@ -20,12 +20,12 @@ locals {
       port = 5050
       env = [
         { name = "PORT", value = "5050" },
-        { name = "PRODUCT_CATALOG_SERVICE_ADDR", value = "${var.project_name}-productcatalogservice.${var.project_name}.local:3550" },
-        { name = "SHIPPING_SERVICE_ADDR", value = "${var.project_name}-shippingservice.${var.project_name}.local:50051" },
-        { name = "PAYMENT_SERVICE_ADDR", value = "${var.project_name}-paymentservice.${var.project_name}.local:50051" },
-        { name = "EMAIL_SERVICE_ADDR", value = "${var.project_name}-emailservice.${var.project_name}.local:8080" },
-        { name = "CURRENCY_SERVICE_ADDR", value = "${var.project_name}-currencyservice.${var.project_name}.local:7000" },
-        { name = "CART_SERVICE_ADDR", value = "${var.project_name}-cartservice.${var.project_name}.local:7070" }
+        { name = "PRODUCT_CATALOG_SERVICE_ADDR", value = "${var.project_name}-productcatalogservice.${var.project_name}.private:3550" },
+        { name = "SHIPPING_SERVICE_ADDR", value = "${var.project_name}-shippingservice.${var.project_name}.private:50051" },
+        { name = "PAYMENT_SERVICE_ADDR", value = "${var.project_name}-paymentservice.${var.project_name}.private:50051" },
+        { name = "EMAIL_SERVICE_ADDR", value = "${var.project_name}-emailservice.${var.project_name}.private:8080" },
+        { name = "CURRENCY_SERVICE_ADDR", value = "${var.project_name}-currencyservice.${var.project_name}.private:7000" },
+        { name = "CART_SERVICE_ADDR", value = "${var.project_name}-cartservice.${var.project_name}.private:7070" }
       ]
     }
     currencyservice = {
@@ -50,7 +50,7 @@ locals {
       port = 8080
       env = [
         { name = "PORT", value = "8080" },
-        { name = "PRODUCT_CATALOG_SERVICE_ADDR", value = "${var.project_name}-productcatalogservice.${var.project_name}.local:3550" }
+        { name = "PRODUCT_CATALOG_SERVICE_ADDR", value = "${var.project_name}-productcatalogservice.${var.project_name}.private:3550" }
       ]
     }
     shippingservice = {
@@ -345,14 +345,14 @@ module "frontend" {
       ]
       environment = [
         { name = "PORT", value = "8080" },
-        { name = "PRODUCT_CATALOG_SERVICE_ADDR", value = "${var.project_name}-productcatalogservice.${var.project_name}.local:3550" },
-        { name = "CURRENCY_SERVICE_ADDR", value = "${var.project_name}-currencyservice.${var.project_name}.local:7000" },
-        { name = "CART_SERVICE_ADDR", value = "${var.project_name}-cartservice.${var.project_name}.local:7070" },
-        { name = "RECOMMENDATION_SERVICE_ADDR", value = "${var.project_name}-recommendationservice.${var.project_name}.local:8080" },
-        { name = "SHIPPING_SERVICE_ADDR", value = "${var.project_name}-shippingservice.${var.project_name}.local:50051" },
-        { name = "CHECKOUT_SERVICE_ADDR", value = "${var.project_name}-checkoutservice.${var.project_name}.local:5050" },
-        { name = "AD_SERVICE_ADDR", value = "${var.project_name}-adservice.${var.project_name}.local:9555" },
-        { name = "SHOPPING_ASSISTANT_SERVICE_ADDR", value = "${var.project_name}-shoppingassistantservice.${var.project_name}.local:8080" }
+        { name = "PRODUCT_CATALOG_SERVICE_ADDR", value = "${var.project_name}-productcatalogservice.${var.project_name}.private:3550" },
+        { name = "CURRENCY_SERVICE_ADDR", value = "${var.project_name}-currencyservice.${var.project_name}.private:7000" },
+        { name = "CART_SERVICE_ADDR", value = "${var.project_name}-cartservice.${var.project_name}.private:7070" },
+        { name = "RECOMMENDATION_SERVICE_ADDR", value = "${var.project_name}-recommendationservice.${var.project_name}.private:8080" },
+        { name = "SHIPPING_SERVICE_ADDR", value = "${var.project_name}-shippingservice.${var.project_name}.private:50051" },
+        { name = "CHECKOUT_SERVICE_ADDR", value = "${var.project_name}-checkoutservice.${var.project_name}.private:5050" },
+        { name = "AD_SERVICE_ADDR", value = "${var.project_name}-adservice.${var.project_name}.private:9555" },
+        { name = "SHOPPING_ASSISTANT_SERVICE_ADDR", value = "${var.project_name}-shoppingassistantservice.${var.project_name}.private:8080" }
       ]
       # Using CloudWatch log group created by the module
       enable_cloudwatch_logging = true
@@ -435,6 +435,7 @@ module "redis" {
   cluster_id               = "${var.project_name}-redis"
   create_cluster           = true
   create_replication_group = false
+  subnet_group_name        = "${var.project_name}-redis-subnet-group"
   create_security_group    = false
 
   engine          = "redis"
