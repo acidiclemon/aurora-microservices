@@ -81,8 +81,8 @@ variable "shopping_assistant_alloydb_secret" {
   default = ""
 }
 
-variable "acm_certificate_arn" {
-  description = "ARN of the ACM certificate for CloudFront (must be in us-east-1)"
+variable "acm_certificate_id" {
+  description = "ID of the ACM certificate for CloudFront (must be in us-east-1)"
   type        = string
   default     = ""
 }

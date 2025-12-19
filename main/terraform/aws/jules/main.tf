@@ -2,7 +2,11 @@ provider "aws" {
   region = var.region
 }
 
+data "aws_caller_identity" "current" {}
+
 locals {
+  acm_certificate_arn = var.acm_certificate_id != "" ? "arn:aws:acm:us-east-1:${data.aws_caller_identity.current.account_id}:certificate/${var.acm_certificate_id}" : ""
+
   cluster_name = "${var.project_name}-cluster"
   namespace    = "${var.project_name}.private"
 
@@ -528,8 +532,8 @@ resource "aws_cloudfront_distribution" "this" {
   }
 
   viewer_certificate {
-    cloudfront_default_certificate = var.acm_certificate_arn == ""
-    acm_certificate_arn            = var.acm_certificate_arn
-    ssl_support_method             = var.acm_certificate_arn != "" ? "sni-only" : null
+    cloudfront_default_certificate = local.acm_certificate_arn == ""
+    acm_certificate_arn            = local.acm_certificate_arn
+    ssl_support_method             = local.acm_certificate_arn != "" ? "sni-only" : null
   }
 }
