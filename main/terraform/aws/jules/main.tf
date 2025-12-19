@@ -471,7 +471,7 @@ resource "aws_route53_record" "this" {
   count = var.domain_name != "" && var.hosted_zone_id != "" ? 1 : 0
 
   zone_id = data.aws_route53_zone.this[0].zone_id
-  name    = var.domain_name
+  name    = "${var.project_name}.${var.domain_name}"
   type    = "A"
 
   alias {
@@ -493,7 +493,7 @@ resource "aws_cloudfront_distribution" "this" {
   retain_on_delete    = false
   wait_for_deployment = false
 
-  aliases = var.domain_name != "" ? [var.domain_name] : []
+  aliases = var.domain_name != "" ? ["${var.project_name}.${var.domain_name}"] : []
 
   origin {
     domain_name = module.alb.dns_name
