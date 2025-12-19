@@ -2,11 +2,6 @@ provider "aws" {
   region = var.region
 }
 
-provider "aws" {
-  alias  = "us_east_1"
-  region = "us-east-1"
-}
-
 locals {
   cluster_name = "${var.project_name}-cluster"
   namespace    = "${var.project_name}.private"
@@ -487,32 +482,6 @@ resource "aws_route53_record" "this" {
 }
 
 ################################################################################
-# ACM
-################################################################################
-
-module "acm" {
-  source  = "terraform-aws-modules/acm/aws"
-  version = "~> 5.0"
-
-  providers = {
-    aws = aws.us_east_1
-  }
-
-  create_certificate = var.domain_name != "" && var.hosted_zone_id != ""
-
-  domain_name = var.domain_name
-  zone_id     = try(data.aws_route53_zone.this[0].zone_id, "")
-
-  validation_method = "DNS"
-
-  subject_alternative_names = [
-    "*.${var.domain_name}"
-  ]
-
-  wait_for_validation = true
-}
-
-################################################################################
 # CloudFront
 ################################################################################
 
@@ -559,8 +528,8 @@ resource "aws_cloudfront_distribution" "this" {
   }
 
   viewer_certificate {
-    cloudfront_default_certificate = var.domain_name == ""
-    acm_certificate_arn            = var.domain_name != "" ? module.acm.acm_certificate_arn : null
-    ssl_support_method             = var.domain_name != "" ? "sni-only" : null
+    cloudfront_default_certificate = var.acm_certificate_arn == ""
+    acm_certificate_arn            = var.acm_certificate_arn
+    ssl_support_method             = var.acm_certificate_arn != "" ? "sni-only" : null
   }
 }

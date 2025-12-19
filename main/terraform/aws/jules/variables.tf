@@ -80,3 +80,9 @@ variable "shopping_assistant_alloydb_secret" {
   type = string
   default = ""
 }
+
+variable "acm_certificate_arn" {
+  description = "ARN of the ACM certificate for CloudFront (must be in us-east-1)"
+  type        = string
+  default     = ""
+}
