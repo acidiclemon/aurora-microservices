@@ -2,6 +2,11 @@ provider "aws" {
   region = var.region
 }
 
+provider "aws" {
+  alias  = "us_east_1"
+  region = "us-east-1"
+}
+
 locals {
   cluster_name = "${var.project_name}-cluster"
   namespace    = "${var.project_name}.private"
@@ -475,10 +480,36 @@ resource "aws_route53_record" "this" {
   type    = "A"
 
   alias {
-    name                   = module.alb.dns_name
-    zone_id                = module.alb.zone_id
-    evaluate_target_health = true
+    name                   = aws_cloudfront_distribution.this.domain_name
+    zone_id                = aws_cloudfront_distribution.this.hosted_zone_id
+    evaluate_target_health = false
   }
+}
+
+################################################################################
+# ACM
+################################################################################
+
+module "acm" {
+  source  = "terraform-aws-modules/acm/aws"
+  version = "~> 5.0"
+
+  providers = {
+    aws = aws.us_east_1
+  }
+
+  create_certificate = var.domain_name != "" && var.hosted_zone_id != ""
+
+  domain_name = var.domain_name
+  zone_id     = try(data.aws_route53_zone.this[0].zone_id, "")
+
+  validation_method = "DNS"
+
+  subject_alternative_names = [
+    "*.${var.domain_name}"
+  ]
+
+  wait_for_validation = true
 }
 
 ################################################################################
@@ -492,6 +523,8 @@ resource "aws_cloudfront_distribution" "this" {
   price_class         = "PriceClass_100"
   retain_on_delete    = false
   wait_for_deployment = false
+
+  aliases = var.domain_name != "" ? [var.domain_name] : []
 
   origin {
     domain_name = module.alb.dns_name
@@ -526,6 +559,8 @@ resource "aws_cloudfront_distribution" "this" {
   }
 
   viewer_certificate {
-    cloudfront_default_certificate = true
+    cloudfront_default_certificate = var.domain_name == ""
+    acm_certificate_arn            = var.domain_name != "" ? module.acm.acm_certificate_arn : null
+    ssl_support_method             = var.domain_name != "" ? "sni-only" : null
   }
 }
