@@ -1,5 +1,5 @@
 variable "hosted_zone_id" {
-  description = "Route53 Hosted Zone ID"
+  description = "Route53 Hosted Zone ID or Name (e.g. example.com)"
   type        = string
   default     = ""
 }

@@ -455,10 +455,22 @@ module "redis" {
 # Route53
 ################################################################################
 
+locals {
+  # If hosted_zone_id contains a dot, assume it is a name (e.g. example.com)
+  hosted_zone_is_name = can(regex("\\.", var.hosted_zone_id))
+}
+
+data "aws_route53_zone" "this" {
+  count = var.domain_name != "" && var.hosted_zone_id != "" ? 1 : 0
+
+  name    = local.hosted_zone_is_name ? var.hosted_zone_id : null
+  zone_id = local.hosted_zone_is_name ? null : var.hosted_zone_id
+}
+
 resource "aws_route53_record" "this" {
   count = var.domain_name != "" && var.hosted_zone_id != "" ? 1 : 0
 
-  zone_id = var.hosted_zone_id
+  zone_id = data.aws_route53_zone.this[0].zone_id
   name    = var.domain_name
   type    = "A"
 
