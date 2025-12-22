@@ -216,7 +216,7 @@ module "ecs" {
   # Capacity Provider
   default_capacity_provider_use_fargate = false
   autoscaling_capacity_providers = {
-    microservices = {
+    "${var.project_name}-microservices" = {
       auto_scaling_group_arn         = module.autoscaling.autoscaling_group_arn
       managed_termination_protection = "DISABLED"
 
