@@ -112,9 +112,9 @@ module "alb_sg" {
   description = "Security group for ALB"
   vpc_id      = module.vpc.vpc_id
 
-  ingress_cidr_blocks = ["0.0.0.0/0"]
-  ingress_rules       = ["http-80-tcp"]
-  egress_rules        = ["all-all"]
+  ingress_prefix_list_ids = [data.aws_ec2_managed_prefix_list.cloudfront.id]
+  ingress_rules           = ["http-80-tcp"]
+  egress_rules            = ["all-all"]
 }
 
 module "ecs_sg" {
