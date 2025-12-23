@@ -458,7 +458,7 @@ module "microservices" {
           aws_pca_authority_arn = aws_acmpca_certificate_authority.this.arn
         }
       }
-    } : {}
+    } : null
   }
 
   container_definitions = {
