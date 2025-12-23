@@ -357,12 +357,10 @@ module "frontend" {
     service = {
       discovery_name = "frontend"
       port_name      = "frontend-8080-tcp"
-      client_alias = [
-        {
-          port     = 8080
-          dns_name = "frontend"
-        }
-      ]
+      client_alias = {
+        port     = 8080
+        dns_name = "frontend"
+      }
       tls = {
         issuer_cert_authority = {
           aws_pca_authority_arn = aws_acmpca_certificate_authority.this.arn
@@ -433,33 +431,35 @@ module "microservices" {
   memory       = 512
   network_mode = "awsvpc"
 
-  service_connect_configuration = {
-    enabled   = true
-    namespace = local.namespace
-    log_configuration = {
-      log_driver = "awslogs"
-      options = {
-        awslogs-region        = var.region
-        awslogs-group         = aws_cloudwatch_log_group.service_connect.name
-        awslogs-stream-prefix = each.key
+  service_connect_configuration = merge(
+    {
+      enabled   = true
+      namespace = local.namespace
+      log_configuration = {
+        log_driver = "awslogs"
+        options = {
+          awslogs-region        = var.region
+          awslogs-group         = aws_cloudwatch_log_group.service_connect.name
+          awslogs-stream-prefix = each.key
+        }
       }
-    }
-    service = try(each.value.port, null) != null ? {
-      discovery_name = "${var.project_name}-${terraform.workspace}-${each.key}"
-      port_name      = "${each.key}-${each.value.port}-tcp"
-      client_alias = [
-        {
+    },
+    try(each.value.port, null) != null ? {
+      service = {
+        discovery_name = "${var.project_name}-${terraform.workspace}-${each.key}"
+        port_name      = "${each.key}-${each.value.port}-tcp"
+        client_alias = {
           port     = each.value.port
           dns_name = "${var.project_name}-${terraform.workspace}-${each.key}"
         }
-      ]
-      tls = {
-        issuer_cert_authority = {
-          aws_pca_authority_arn = aws_acmpca_certificate_authority.this.arn
+        tls = {
+          issuer_cert_authority = {
+            aws_pca_authority_arn = aws_acmpca_certificate_authority.this.arn
+          }
         }
       }
-    } : null
-  }
+    } : {}
+  )
 
   container_definitions = {
     (each.key) = {
