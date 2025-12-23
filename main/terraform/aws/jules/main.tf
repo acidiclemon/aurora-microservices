@@ -316,6 +316,11 @@ resource "aws_service_discovery_service" "this" {
   }
 }
 
+resource "aws_cloudwatch_log_group" "service_connect" {
+  name              = "/aws/ecs/${var.project_name}-${terraform.workspace}/service-connect"
+  retention_in_days = 7
+}
+
 ################################################################################
 # ECS Services
 ################################################################################
@@ -345,9 +350,8 @@ module "frontend" {
       log_driver = "awslogs"
       options = {
         awslogs-region        = var.region
-        awslogs-group         = "/aws/ecs/${var.project_name}-${terraform.workspace}/service-connect"
+        awslogs-group         = aws_cloudwatch_log_group.service_connect.name
         awslogs-stream-prefix = "frontend"
-        awslogs-create-group  = "true"
       }
     }
     service = {
@@ -435,9 +439,8 @@ module "microservices" {
       log_driver = "awslogs"
       options = {
         awslogs-region        = var.region
-        awslogs-group         = "/aws/ecs/${var.project_name}-${terraform.workspace}/service-connect"
+        awslogs-group         = aws_cloudwatch_log_group.service_connect.name
         awslogs-stream-prefix = each.key
-        awslogs-create-group  = "true"
       }
     }
     service = {
