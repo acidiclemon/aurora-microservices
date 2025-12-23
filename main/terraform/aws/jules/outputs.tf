@@ -22,3 +22,8 @@ output "cloudfront_domain_name" {
   description = "The domain name of the CloudFront distribution"
   value       = aws_cloudfront_distribution.this.domain_name
 }
+
+output "website_url" {
+  description = "The full URL to access the website"
+  value       = var.domain_name != "" ? "https://${var.project_name}-${terraform.workspace}.${var.domain_name}" : "http://${module.alb.dns_name}"
+}
