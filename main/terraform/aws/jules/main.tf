@@ -213,10 +213,6 @@ module "ecs" {
 
   cluster_name = local.cluster_name
 
-  cluster_service_connect_defaults = {
-    namespace = aws_service_discovery_private_dns_namespace.this.arn
-  }
-
   # Capacity Provider
   default_capacity_provider_use_fargate = false
   autoscaling_capacity_providers = {
@@ -339,24 +335,6 @@ module "frontend" {
   memory       = 512
   network_mode = "awsvpc"
 
-  service_connect_configuration = {
-    enabled   = true
-    namespace = aws_service_discovery_private_dns_namespace.this.arn
-    service = {
-      client_alias = [
-        {
-          port     = 8080
-          dns_name = "${var.project_name}-frontend"
-        }
-      ]
-    }
-    tls = {
-      issuer_cert_authority = {
-        aws_pca_authority_arn = aws_acmpca_certificate_authority.this.arn
-      }
-    }
-  }
-
   container_definitions = {
     frontend = {
       image     = "${var.image_repo_url}/frontend:${var.image_tag}"
@@ -416,25 +394,6 @@ module "microservices" {
   memory       = 512
   network_mode = "awsvpc"
 
-  service_connect_configuration = {
-    enabled   = true
-    namespace = aws_service_discovery_private_dns_namespace.this.arn
-    service = {
-      discovery_name = "${var.project_name}-${each.key}"
-      client_alias = try(each.value.port, null) != null ? [
-        {
-          port     = each.value.port
-          dns_name = "${var.project_name}-${each.key}.${var.project_name}.private"
-        }
-      ] : []
-    }
-    tls = {
-      issuer_cert_authority = {
-        aws_pca_authority_arn = aws_acmpca_certificate_authority.this.arn
-      }
-    }
-  }
-
   container_definitions = {
     (each.key) = {
       image     = "${var.image_repo_url}/${each.key}:${var.image_tag}"
@@ -457,6 +416,10 @@ module "microservices" {
 
       enable_cloudwatch_logging = true
     }
+  }
+
+  service_registries = {
+    registry_arn = aws_service_discovery_service.this[each.key].arn
   }
 
   subnet_ids         = module.vpc.private_subnets
