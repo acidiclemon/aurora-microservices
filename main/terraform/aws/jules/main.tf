@@ -328,12 +328,43 @@ module "frontend" {
   name        = "${var.project_name}-${terraform.workspace}-frontend"
   cluster_arn = module.ecs.cluster_arn
 
-  create_tasks_iam_role = false
+  create_tasks_iam_role = true
+  tasks_iam_role_policies = {
+    acm_pca = aws_iam_policy.acm_pca_policy.arn
+  }
   create_security_group = false
 
   cpu          = 256
   memory       = 512
   network_mode = "awsvpc"
+
+  service_connect_configuration = {
+    enabled   = true
+    namespace = local.namespace
+    log_configuration = {
+      log_driver = "awslogs"
+      options = {
+        awslogs-region        = var.region
+        awslogs-group         = "/aws/ecs/${var.project_name}-${terraform.workspace}/service-connect"
+        awslogs-stream-prefix = "frontend"
+        awslogs-create-group  = "true"
+      }
+    }
+    service = {
+      discovery_name = "frontend"
+      client_alias = [
+        {
+          port     = 8080
+          dns_name = "frontend"
+        }
+      ]
+      tls = {
+        issuer_cert_authority = {
+          aws_pca_authority_arn = aws_acmpca_certificate_authority.this.arn
+        }
+      }
+    }
+  }
 
   container_definitions = {
     frontend = {
@@ -387,12 +418,43 @@ module "microservices" {
   name        = "${var.project_name}-${terraform.workspace}-${each.key}"
   cluster_arn = module.ecs.cluster_arn
 
-  create_tasks_iam_role = false
+  create_tasks_iam_role = true
+  tasks_iam_role_policies = {
+    acm_pca = aws_iam_policy.acm_pca_policy.arn
+  }
   create_security_group = false
 
   cpu          = 256
   memory       = 512
   network_mode = "awsvpc"
+
+  service_connect_configuration = {
+    enabled   = true
+    namespace = local.namespace
+    log_configuration = {
+      log_driver = "awslogs"
+      options = {
+        awslogs-region        = var.region
+        awslogs-group         = "/aws/ecs/${var.project_name}-${terraform.workspace}/service-connect"
+        awslogs-stream-prefix = each.key
+        awslogs-create-group  = "true"
+      }
+    }
+    service = {
+      discovery_name = "${var.project_name}-${terraform.workspace}-${each.key}"
+      client_alias = try(each.value.port, null) != null ? [
+        {
+          port     = each.value.port
+          dns_name = "${var.project_name}-${terraform.workspace}-${each.key}"
+        }
+      ] : []
+      tls = {
+        issuer_cert_authority = {
+          aws_pca_authority_arn = aws_acmpca_certificate_authority.this.arn
+        }
+      }
+    }
+  }
 
   container_definitions = {
     (each.key) = {
@@ -416,10 +478,6 @@ module "microservices" {
 
       enable_cloudwatch_logging = true
     }
-  }
-
-  service_registries = {
-    registry_arn = aws_service_discovery_service.this[each.key].arn
   }
 
   subnet_ids         = module.vpc.private_subnets
