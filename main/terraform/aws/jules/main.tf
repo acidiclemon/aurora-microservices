@@ -356,6 +356,7 @@ module "frontend" {
     }
     service = {
       discovery_name = "frontend"
+      port_name      = "frontend-8080-tcp"
       client_alias = [
         {
           port     = 8080
@@ -443,20 +444,21 @@ module "microservices" {
         awslogs-stream-prefix = each.key
       }
     }
-    service = {
+    service = try(each.value.port, null) != null ? {
       discovery_name = "${var.project_name}-${terraform.workspace}-${each.key}"
-      client_alias = try(each.value.port, null) != null ? [
+      port_name      = "${each.key}-${each.value.port}-tcp"
+      client_alias = [
         {
           port     = each.value.port
           dns_name = "${var.project_name}-${terraform.workspace}-${each.key}"
         }
-      ] : []
+      ]
       tls = {
         issuer_cert_authority = {
           aws_pca_authority_arn = aws_acmpca_certificate_authority.this.arn
         }
       }
-    }
+    } : {}
   }
 
   container_definitions = {
