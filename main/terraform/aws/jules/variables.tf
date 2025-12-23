@@ -84,5 +84,5 @@ variable "shopping_assistant_alloydb_secret" {
 variable "acm_certificate_id" {
   description = "ID of the ACM certificate for CloudFront (must be in us-east-1)"
   type        = string
-  default     = ""
+  default     = "d3e5a80f-a4a7-4ff7-85bd-e33dad5a507b"
 }

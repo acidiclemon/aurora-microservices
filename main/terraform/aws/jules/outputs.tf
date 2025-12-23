@@ -25,5 +25,5 @@ output "cloudfront_domain_name" {
 
 output "website_url" {
   description = "The full URL to access the website"
-  value       = var.domain_name != "" ? "https://${var.project_name}.${var.domain_name}" : "http://${module.alb.dns_name}"
+  value       = var.domain_name != "" ? "https://${var.project_name}-${terraform.workspace}.${var.domain_name}" : "http://${module.alb.dns_name}"
 }
