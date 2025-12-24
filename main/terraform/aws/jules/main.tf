@@ -343,6 +343,15 @@ module "frontend" {
   memory       = 512
   network_mode = "awsvpc"
 
+  requires_compatibilities = ["EC2"]
+  capacity_provider_strategy = [
+    {
+      capacity_provider = "${var.project_name}-${terraform.workspace}-microservices"
+      weight            = 100
+      base              = 1
+    }
+  ]
+
   service_connect_configuration = {
     enabled   = true
     namespace = local.namespace
@@ -430,6 +439,15 @@ module "microservices" {
   cpu          = 256
   memory       = 512
   network_mode = "awsvpc"
+
+  requires_compatibilities = ["EC2"]
+  capacity_provider_strategy = [
+    {
+      capacity_provider = "${var.project_name}-${terraform.workspace}-microservices"
+      weight            = 100
+      base              = 1
+    }
+  ]
 
   service_connect_configuration = merge(
     {
