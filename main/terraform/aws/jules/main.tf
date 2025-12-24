@@ -24,12 +24,12 @@ locals {
       port = 5050
       env = [
         { name = "PORT", value = "5050" },
-        { name = "PRODUCT_CATALOG_SERVICE_ADDR", value = "${var.project_name}-${terraform.workspace}-productcatalogservice.${var.project_name}-${terraform.workspace}.private:3550" },
-        { name = "SHIPPING_SERVICE_ADDR", value = "${var.project_name}-${terraform.workspace}-shippingservice.${var.project_name}-${terraform.workspace}.private:50051" },
-        { name = "PAYMENT_SERVICE_ADDR", value = "${var.project_name}-${terraform.workspace}-paymentservice.${var.project_name}-${terraform.workspace}.private:50051" },
-        { name = "EMAIL_SERVICE_ADDR", value = "${var.project_name}-${terraform.workspace}-emailservice.${var.project_name}-${terraform.workspace}.private:8080" },
-        { name = "CURRENCY_SERVICE_ADDR", value = "${var.project_name}-${terraform.workspace}-currencyservice.${var.project_name}-${terraform.workspace}.private:7000" },
-        { name = "CART_SERVICE_ADDR", value = "${var.project_name}-${terraform.workspace}-cartservice.${var.project_name}-${terraform.workspace}.private:7070" }
+        { name = "PRODUCT_CATALOG_SERVICE_ADDR", value = "${var.project_name}-${terraform.workspace}-productcatalogservice-sc.${var.project_name}-${terraform.workspace}.private:3550" },
+        { name = "SHIPPING_SERVICE_ADDR", value = "${var.project_name}-${terraform.workspace}-shippingservice-sc.${var.project_name}-${terraform.workspace}.private:50051" },
+        { name = "PAYMENT_SERVICE_ADDR", value = "${var.project_name}-${terraform.workspace}-paymentservice-sc.${var.project_name}-${terraform.workspace}.private:50051" },
+        { name = "EMAIL_SERVICE_ADDR", value = "${var.project_name}-${terraform.workspace}-emailservice-sc.${var.project_name}-${terraform.workspace}.private:8080" },
+        { name = "CURRENCY_SERVICE_ADDR", value = "${var.project_name}-${terraform.workspace}-currencyservice-sc.${var.project_name}-${terraform.workspace}.private:7000" },
+        { name = "CART_SERVICE_ADDR", value = "${var.project_name}-${terraform.workspace}-cartservice-sc.${var.project_name}-${terraform.workspace}.private:7070" }
       ]
     }
     currencyservice = {
@@ -54,7 +54,7 @@ locals {
       port = 8080
       env = [
         { name = "PORT", value = "8080" },
-        { name = "PRODUCT_CATALOG_SERVICE_ADDR", value = "${var.project_name}-${terraform.workspace}-productcatalogservice.${var.project_name}-${terraform.workspace}.private:3550" }
+        { name = "PRODUCT_CATALOG_SERVICE_ADDR", value = "${var.project_name}-${terraform.workspace}-productcatalogservice-sc.${var.project_name}-${terraform.workspace}.private:3550" }
       ]
     }
     shippingservice = {
@@ -355,11 +355,11 @@ module "frontend" {
       }
     }
     service = {
-      discovery_name = "frontend"
+      discovery_name = "frontend-sc"
       port_name      = "frontend-8080-tcp"
       client_alias = {
         port     = 8080
-        dns_name = "frontend"
+        dns_name = "frontend-sc"
       }
       tls = {
         issuer_cert_authority = {
@@ -383,14 +383,14 @@ module "frontend" {
       ]
       environment = [
         { name = "PORT", value = "8080" },
-        { name = "PRODUCT_CATALOG_SERVICE_ADDR", value = "${var.project_name}-${terraform.workspace}-productcatalogservice.${var.project_name}-${terraform.workspace}.private:3550" },
-        { name = "CURRENCY_SERVICE_ADDR", value = "${var.project_name}-${terraform.workspace}-currencyservice.${var.project_name}-${terraform.workspace}.private:7000" },
-        { name = "CART_SERVICE_ADDR", value = "${var.project_name}-${terraform.workspace}-cartservice.${var.project_name}-${terraform.workspace}.private:7070" },
-        { name = "RECOMMENDATION_SERVICE_ADDR", value = "${var.project_name}-${terraform.workspace}-recommendationservice.${var.project_name}-${terraform.workspace}.private:8080" },
-        { name = "SHIPPING_SERVICE_ADDR", value = "${var.project_name}-${terraform.workspace}-shippingservice.${var.project_name}-${terraform.workspace}.private:50051" },
-        { name = "CHECKOUT_SERVICE_ADDR", value = "${var.project_name}-${terraform.workspace}-checkoutservice.${var.project_name}-${terraform.workspace}.private:5050" },
-        { name = "AD_SERVICE_ADDR", value = "${var.project_name}-${terraform.workspace}-adservice.${var.project_name}-${terraform.workspace}.private:9555" },
-        { name = "SHOPPING_ASSISTANT_SERVICE_ADDR", value = "${var.project_name}-${terraform.workspace}-shoppingassistantservice.${var.project_name}-${terraform.workspace}.private:8080" }
+        { name = "PRODUCT_CATALOG_SERVICE_ADDR", value = "${var.project_name}-${terraform.workspace}-productcatalogservice-sc.${var.project_name}-${terraform.workspace}.private:3550" },
+        { name = "CURRENCY_SERVICE_ADDR", value = "${var.project_name}-${terraform.workspace}-currencyservice-sc.${var.project_name}-${terraform.workspace}.private:7000" },
+        { name = "CART_SERVICE_ADDR", value = "${var.project_name}-${terraform.workspace}-cartservice-sc.${var.project_name}-${terraform.workspace}.private:7070" },
+        { name = "RECOMMENDATION_SERVICE_ADDR", value = "${var.project_name}-${terraform.workspace}-recommendationservice-sc.${var.project_name}-${terraform.workspace}.private:8080" },
+        { name = "SHIPPING_SERVICE_ADDR", value = "${var.project_name}-${terraform.workspace}-shippingservice-sc.${var.project_name}-${terraform.workspace}.private:50051" },
+        { name = "CHECKOUT_SERVICE_ADDR", value = "${var.project_name}-${terraform.workspace}-checkoutservice-sc.${var.project_name}-${terraform.workspace}.private:5050" },
+        { name = "AD_SERVICE_ADDR", value = "${var.project_name}-${terraform.workspace}-adservice-sc.${var.project_name}-${terraform.workspace}.private:9555" },
+        { name = "SHOPPING_ASSISTANT_SERVICE_ADDR", value = "${var.project_name}-${terraform.workspace}-shoppingassistantservice-sc.${var.project_name}-${terraform.workspace}.private:8080" }
       ]
       # Using CloudWatch log group created by the module
       enable_cloudwatch_logging = true
@@ -446,11 +446,11 @@ module "microservices" {
     },
     try(each.value.port, null) != null ? {
       service = {
-        discovery_name = "${var.project_name}-${terraform.workspace}-${each.key}"
+        discovery_name = "${var.project_name}-${terraform.workspace}-${each.key}-sc"
         port_name      = "${each.key}-${each.value.port}-tcp"
         client_alias = {
           port     = each.value.port
-          dns_name = "${var.project_name}-${terraform.workspace}-${each.key}"
+          dns_name = "${var.project_name}-${terraform.workspace}-${each.key}-sc"
         }
         tls = {
           issuer_cert_authority = {
