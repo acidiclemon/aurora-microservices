@@ -276,7 +276,7 @@ module "autoscaling" {
   vpc_zone_identifier = module.vpc.private_subnets
   health_check_type   = "EC2"
   min_size            = 1
-  max_size            = 5
+  max_size            = 6
   desired_capacity    = 2
 
   # https://github.com/hashicorp/terraform-provider-aws/issues/12582
@@ -331,8 +331,8 @@ module "frontend" {
   create_tasks_iam_role = false
   create_security_group = false
 
-  cpu          = 256
-  memory       = 512
+  cpu          = 180
+  memory       = 300
   network_mode = "awsvpc"
 
   container_definitions = {
@@ -371,6 +371,16 @@ module "frontend" {
     }
   }
 
+  capacity_provider_strategy = {
+    "${var.project_name}-${terraform.workspace}-microservices" = {
+      capacity_provider = "${var.project_name}-${terraform.workspace}-microservices"
+      weight            = 100
+      base              = 1
+    }
+  }
+
+  requires_compatibilities = ["EC2"]
+
   subnet_ids         = module.vpc.private_subnets
   security_group_ids = [module.ecs_sg.security_group_id]
 
@@ -390,8 +400,8 @@ module "microservices" {
   create_tasks_iam_role = false
   create_security_group = false
 
-  cpu          = 256
-  memory       = 512
+  cpu          = 180
+  memory       = 300
   network_mode = "awsvpc"
 
   container_definitions = {
@@ -421,6 +431,16 @@ module "microservices" {
   service_registries = {
     registry_arn = aws_service_discovery_service.this[each.key].arn
   }
+
+  capacity_provider_strategy = {
+    "${var.project_name}-${terraform.workspace}-microservices" = {
+      capacity_provider = "${var.project_name}-${terraform.workspace}-microservices"
+      weight            = 100
+      base              = 1
+    }
+  }
+
+  requires_compatibilities = ["EC2"]
 
   subnet_ids         = module.vpc.private_subnets
   security_group_ids = [module.ecs_sg.security_group_id]
