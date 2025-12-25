@@ -373,7 +373,9 @@ module "frontend" {
 
   capacity_provider_strategy = {
     "${var.project_name}-${terraform.workspace}-microservices" = {
-      weight = 100
+      capacity_provider = "${var.project_name}-${terraform.workspace}-microservices"
+      weight            = 100
+      base              = 1
     }
   }
 
@@ -432,7 +434,9 @@ module "microservices" {
 
   capacity_provider_strategy = {
     "${var.project_name}-${terraform.workspace}-microservices" = {
-      weight = 100
+      capacity_provider = "${var.project_name}-${terraform.workspace}-microservices"
+      weight            = 100
+      base              = 1
     }
   }
 
