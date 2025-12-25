@@ -371,6 +371,14 @@ module "frontend" {
     }
   }
 
+  capacity_provider_strategy = {
+    "${var.project_name}-${terraform.workspace}-microservices" = {
+      weight = 100
+    }
+  }
+
+  requires_compatibilities = ["EC2"]
+
   subnet_ids         = module.vpc.private_subnets
   security_group_ids = [module.ecs_sg.security_group_id]
 
@@ -421,6 +429,14 @@ module "microservices" {
   service_registries = {
     registry_arn = aws_service_discovery_service.this[each.key].arn
   }
+
+  capacity_provider_strategy = {
+    "${var.project_name}-${terraform.workspace}-microservices" = {
+      weight = 100
+    }
+  }
+
+  requires_compatibilities = ["EC2"]
 
   subnet_ids         = module.vpc.private_subnets
   security_group_ids = [module.ecs_sg.security_group_id]
