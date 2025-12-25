@@ -4,6 +4,12 @@ provider "aws" {
 
 data "aws_caller_identity" "current" {}
 
+# Enable ENI Trunking to support more tasks per instance
+resource "aws_ecs_account_setting_default" "awsvpc_trunking" {
+  name  = "awsvpcTrunking"
+  value = "enabled"
+}
+
 locals {
   acm_certificate_arn = var.acm_certificate_id != "" ? "arn:aws:acm:us-east-1:${data.aws_caller_identity.current.account_id}:certificate/${var.acm_certificate_id}" : ""
 
@@ -262,8 +268,15 @@ module "autoscaling" {
   }
 
   security_groups             = [module.ecs_sg.security_group_id]
-  user_data                   = base64encode("#!/bin/bash\necho ECS_CLUSTER=${local.cluster_name} >> /etc/ecs/ecs.config")
+  user_data                   = base64encode("#!/bin/bash\necho ECS_CLUSTER=${local.cluster_name} >> /etc/ecs/ecs.config\n# Enable trunking")
   ignore_desired_capacity_changes = true
+
+  instance_refresh = {
+    strategy = "Rolling"
+    preferences = {
+      min_healthy_percentage = 50
+    }
+  }
 
   create_iam_instance_profile = true
   iam_role_name               = "${var.project_name}-${terraform.workspace}-ecs-role"
