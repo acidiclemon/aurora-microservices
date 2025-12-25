@@ -331,8 +331,8 @@ module "frontend" {
   create_tasks_iam_role = false
   create_security_group = false
 
-  cpu          = 256
-  memory       = 512
+  cpu          = 180
+  memory       = 300
   network_mode = "awsvpc"
 
   container_definitions = {
@@ -398,8 +398,8 @@ module "microservices" {
   create_tasks_iam_role = false
   create_security_group = false
 
-  cpu          = 256
-  memory       = 512
+  cpu          = 180
+  memory       = 300
   network_mode = "awsvpc"
 
   container_definitions = {
