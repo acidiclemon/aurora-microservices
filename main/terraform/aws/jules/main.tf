@@ -4,6 +4,11 @@ provider "aws" {
 
 data "aws_caller_identity" "current" {}
 
+resource "aws_ecs_account_setting_default" "trunking" {
+  name  = "awsvpcTrunking"
+  value = "enabled"
+}
+
 locals {
   acm_certificate_arn = var.acm_certificate_id != "" ? "arn:aws:acm:us-east-1:${data.aws_caller_identity.current.account_id}:certificate/${var.acm_certificate_id}" : ""
 
