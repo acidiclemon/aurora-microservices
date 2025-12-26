@@ -557,3 +557,62 @@ resource "aws_cloudfront_distribution" "this" {
     ssl_support_method             = local.acm_certificate_arn != "" ? "sni-only" : null
   }
 }
+
+################################################################################
+# Cleanup Logic
+################################################################################
+
+resource "null_resource" "ecs_asg_terminate" {
+  triggers = {
+    asg_name = module.autoscaling.autoscaling_group_name
+  }
+
+  provisioner "local-exec" {
+    when    = destroy
+    command = <<EOT
+      asg_name=${self.triggers.asg_name}
+      echo "Terminating instances in ASG $asg_name..."
+      instance_ids=$(aws autoscaling describe-auto-scaling-groups --auto-scaling-group-names "$asg_name" --query "AutoScalingGroups[0].Instances[].InstanceId" --output text)
+      if [ -n "$instance_ids" ] && [ "$instance_ids" != "None" ]; then
+        echo "Terminating instances: $instance_ids"
+        aws ec2 terminate-instances --instance-ids $instance_ids --no-cli-pager || true
+      else
+        echo "No instances found in ASG $asg_name."
+      fi
+    EOT
+  }
+
+  depends_on = [
+    module.frontend,
+    module.microservices
+  ]
+}
+
+resource "null_resource" "ecs_service_scale_down" {
+  triggers = {
+    cluster_name = local.cluster_name
+  }
+
+  provisioner "local-exec" {
+    when    = destroy
+    command = <<EOT
+      cluster_name=${self.triggers.cluster_name}
+      echo "Scaling down services in cluster $cluster_name..."
+      services=$(aws ecs list-services --cluster "$cluster_name" --query "serviceArns[]" --output text)
+      if [ -n "$services" ] && [ "$services" != "None" ]; then
+        for service in $services; do
+          echo "Scaling down service $service..."
+          aws ecs update-service --cluster "$cluster_name" --service "$service" --desired-count 0 --no-cli-pager || true
+        done
+        echo "Waiting 60s for services to drain..."
+        sleep 60
+      else
+        echo "No services found in cluster $cluster_name."
+      fi
+    EOT
+  }
+
+  depends_on = [
+    null_resource.ecs_asg_terminate
+  ]
+}
