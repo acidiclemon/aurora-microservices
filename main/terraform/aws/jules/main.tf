@@ -198,8 +198,7 @@ module "alb" {
       health_check = {
         path = "/_healthz"
       }
-      create_attachment    = false
-      deregistration_delay = 5
+      create_attachment = false
     }
   }
 }
@@ -557,4 +556,38 @@ resource "aws_cloudfront_distribution" "this" {
     acm_certificate_arn            = local.acm_certificate_arn
     ssl_support_method             = local.acm_certificate_arn != "" ? "sni-only" : null
   }
+}
+
+################################################################################
+# Cleanup Logic
+################################################################################
+
+resource "null_resource" "ecs_service_scale_down" {
+  triggers = {
+    cluster_name = local.cluster_name
+  }
+
+  provisioner "local-exec" {
+    when    = destroy
+    command = <<EOT
+      cluster_name=${self.triggers.cluster_name}
+      echo "Scaling down services in cluster $cluster_name..."
+      services=$(aws ecs list-services --cluster "$cluster_name" --query "serviceArns[]" --output text)
+      if [ -n "$services" ] && [ "$services" != "None" ]; then
+        for service in $services; do
+          echo "Scaling down service $service..."
+          aws ecs update-service --cluster "$cluster_name" --service "$service" --desired-count 0 --no-cli-pager || true
+        done
+        echo "Waiting 60s for services to drain..."
+        sleep 60
+      else
+        echo "No services found in cluster $cluster_name."
+      fi
+    EOT
+  }
+
+  depends_on = [
+    module.frontend,
+    module.microservices
+  ]
 }
