@@ -9,6 +9,11 @@ resource "aws_ecs_account_setting_default" "trunking" {
   value = "enabled"
 }
 
+resource "time_sleep" "wait_for_trunking" {
+  create_duration = "15s"
+  depends_on      = [aws_ecs_account_setting_default.trunking]
+}
+
 locals {
   acm_certificate_arn = var.acm_certificate_id != "" ? "arn:aws:acm:us-east-1:${data.aws_caller_identity.current.account_id}:certificate/${var.acm_certificate_id}" : ""
 
@@ -275,13 +280,6 @@ module "autoscaling" {
   )
   ignore_desired_capacity_changes = true
 
-  instance_refresh = {
-    strategy = "Rolling"
-    preferences = {
-      min_healthy_percentage = 50
-    }
-  }
-
   create_iam_instance_profile = true
   iam_role_name               = "${var.project_name}-${terraform.workspace}-ecs-role"
   iam_role_description        = "ECS role for ${local.cluster_name}"
@@ -300,6 +298,8 @@ module "autoscaling" {
   autoscaling_group_tags = {
     AmazonECSManaged = true
   }
+
+  depends_on = [time_sleep.wait_for_trunking]
 }
 
 ################################################################################
