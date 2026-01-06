@@ -86,3 +86,9 @@ variable "acm_certificate_id" {
   type        = string
   default     = "d3e5a80f-a4a7-4ff7-85bd-e33dad5a507b"
 }
+
+variable "tasks_per_service" {
+  description = "Initial number of tasks per service"
+  type        = number
+  default     = 1
+}

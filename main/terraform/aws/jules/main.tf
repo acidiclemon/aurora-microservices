@@ -398,6 +398,8 @@ module "frontend" {
   subnet_ids         = module.vpc.private_subnets
   security_group_ids = [module.ecs_sg.security_group_id]
 
+  desired_count = var.tasks_per_service
+
   force_delete = true
 }
 
@@ -417,6 +419,8 @@ module "microservices" {
   cpu          = 140
   memory       = 450
   network_mode = "awsvpc"
+
+  desired_count = try(each.value.desired_count, var.tasks_per_service)
 
   container_definitions = {
     (each.key) = {
