@@ -4,6 +4,16 @@ provider "aws" {
 
 data "aws_caller_identity" "current" {}
 
+resource "aws_ecs_account_setting_default" "trunking" {
+  name  = "awsvpcTrunking"
+  value = "enabled"
+}
+
+resource "time_sleep" "wait_for_trunking" {
+  create_duration = "30s"
+  depends_on      = [aws_ecs_account_setting_default.trunking]
+}
+
 locals {
   acm_certificate_arn = var.acm_certificate_id != "" ? "arn:aws:acm:us-east-1:${data.aws_caller_identity.current.account_id}:certificate/${var.acm_certificate_id}" : ""
 
@@ -246,23 +256,25 @@ module "autoscaling" {
   use_mixed_instances_policy = true
   mixed_instances_policy = {
     instances_distribution = {
-      on_demand_base_capacity                  = 2
+      on_demand_base_capacity                  = 1
       on_demand_percentage_above_base_capacity = 50
       spot_allocation_strategy                 = "price-capacity-optimized"
     }
 
     override = [
       {
-        instance_type = "t3a.medium"
-      },
-      {
-        instance_type = "t3.medium"
+        instance_type = "m6a.large"
       }
     ]
   }
 
   security_groups             = [module.ecs_sg.security_group_id]
-  user_data                   = base64encode("#!/bin/bash\necho ECS_CLUSTER=${local.cluster_name} >> /etc/ecs/ecs.config")
+  user_data = base64encode(<<-EOT
+    #!/bin/bash
+    echo ECS_CLUSTER=${local.cluster_name} >> /etc/ecs/ecs.config
+    # ENI Trunking: ${aws_ecs_account_setting_default.trunking.value}
+  EOT
+  )
   ignore_desired_capacity_changes = true
 
   create_iam_instance_profile = true
@@ -276,13 +288,15 @@ module "autoscaling" {
   vpc_zone_identifier = module.vpc.private_subnets
   health_check_type   = "EC2"
   min_size            = 1
-  max_size            = 6
-  desired_capacity    = 2
+  max_size            = 3
+  desired_capacity    = 1
 
   # https://github.com/hashicorp/terraform-provider-aws/issues/12582
   autoscaling_group_tags = {
     AmazonECSManaged = true
   }
+
+  depends_on = [time_sleep.wait_for_trunking]
 }
 
 ################################################################################
@@ -309,14 +323,15 @@ module "frontend" {
 
   # IAM Role for Service Connect TLS (Private CA)
   create_tasks_iam_role = true
-  tasks_iam_role_policies = {
+  # Policy must be on Task Execution Role for Service Connect to pull secrets
+  task_exec_iam_role_policies = {
     ServiceConnectTLS = aws_iam_policy.service_connect_tls.arn
   }
 
   create_security_group = false
 
-  cpu          = 180
-  memory       = 300
+  cpu          = 140
+  memory       = 450
   network_mode = "awsvpc"
 
   container_definitions = {
@@ -412,14 +427,15 @@ module "microservices" {
 
   # IAM Role for Service Connect TLS (Private CA)
   create_tasks_iam_role = true
-  tasks_iam_role_policies = {
+  # Policy must be on Task Execution Role for Service Connect to pull secrets
+  task_exec_iam_role_policies = {
     ServiceConnectTLS = aws_iam_policy.service_connect_tls.arn
   }
 
   create_security_group = false
 
-  cpu          = 180
-  memory       = 300
+  cpu          = 140
+  memory       = 450
   network_mode = "awsvpc"
 
   container_definitions = {
