@@ -10,7 +10,7 @@ resource "aws_ecs_account_setting_default" "trunking" {
 }
 
 resource "time_sleep" "wait_for_trunking" {
-  create_duration = "15s"
+  create_duration = "60s"
   depends_on      = [aws_ecs_account_setting_default.trunking]
 }
 
