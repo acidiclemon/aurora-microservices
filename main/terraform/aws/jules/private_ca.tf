@@ -1,6 +1,8 @@
 resource "aws_acm_pca_certificate_authority" "this" {
   type = "ROOT"
 
+  usage_mode = "SHORT_LIVED_CERTIFICATE"
+
   certificate_authority_configuration {
     key_algorithm     = "RSA_2048"
     signing_algorithm = "SHA256WITHRSA"
@@ -35,7 +37,7 @@ resource "aws_acm_pca_certificate_authority_certificate" "this" {
 
 resource "aws_iam_policy" "service_connect_tls" {
   name        = "${var.project_name}-${terraform.workspace}-service-connect-tls-policy"
-  description = "Allow ECS tasks to communicate with ACM PCA for Service Connect TLS"
+  description = "Allow ECS tasks to retrieve TLS certificates from Secrets Manager for Service Connect"
 
   policy = jsonencode({
     Version = "2012-10-17"
@@ -43,11 +45,13 @@ resource "aws_iam_policy" "service_connect_tls" {
       {
         Effect = "Allow"
         Action = [
-          "acm-pca:IssueCertificate",
-          "acm-pca:GetCertificate",
-          "acm-pca:DescribeCertificateAuthority"
+          "secretsmanager:GetSecretValue",
+          "kms:Decrypt"
         ]
-        Resource = aws_acm_pca_certificate_authority.this.arn
+        Resource = [
+          "arn:aws:secretsmanager:${var.region}:${data.aws_caller_identity.current.account_id}:secret:ecs-sc!*",
+          "arn:aws:kms:${var.region}:${data.aws_caller_identity.current.account_id}:key/*"
+        ]
       }
     ]
   })
