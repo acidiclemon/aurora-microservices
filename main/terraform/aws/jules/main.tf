@@ -362,6 +362,7 @@ module "frontend" {
 
     service = {
       discovery_name = "frontend-sc"
+      port_name      = "frontend-8080-tcp"
       client_alias = {
         port     = 8080
         dns_name = "frontend-sc"
@@ -370,7 +371,7 @@ module "frontend" {
 
     tls = {
       issuer_cert_authority = {
-        aws_pca_authority_arn = aws_acm_pca_certificate_authority.this.arn
+        aws_pca_authority_arn = aws_acmpca_certificate_authority.this.arn
       }
     }
   }
@@ -460,6 +461,7 @@ module "microservices" {
 
     service = try(each.value.port, null) != null ? {
       discovery_name = "${each.key}-sc"
+      port_name      = "${each.key}-${each.value.port}-tcp"
       client_alias = {
         port     = each.value.port
         dns_name = "${each.key}-sc"
@@ -468,7 +470,7 @@ module "microservices" {
 
     tls = {
       issuer_cert_authority = {
-        aws_pca_authority_arn = aws_acm_pca_certificate_authority.this.arn
+        aws_pca_authority_arn = aws_acmpca_certificate_authority.this.arn
       }
     }
   }

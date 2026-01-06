@@ -1,4 +1,4 @@
-resource "aws_acm_pca_certificate_authority" "this" {
+resource "aws_acmpca_certificate_authority" "this" {
   type = "ROOT"
 
   usage_mode = "SHORT_LIVED_CERTIFICATE"
@@ -17,8 +17,8 @@ resource "aws_acm_pca_certificate_authority" "this" {
 }
 
 resource "aws_acmpca_certificate" "this" {
-  certificate_authority_arn   = aws_acm_pca_certificate_authority.this.arn
-  certificate_signing_request = aws_acm_pca_certificate_authority.this.certificate_signing_request
+  certificate_authority_arn   = aws_acmpca_certificate_authority.this.arn
+  certificate_signing_request = aws_acmpca_certificate_authority.this.certificate_signing_request
   signing_algorithm           = "SHA256WITHRSA"
 
   template_arn = "arn:aws:acm-pca:::template/RootCACertificate/V1"
@@ -29,8 +29,8 @@ resource "aws_acmpca_certificate" "this" {
   }
 }
 
-resource "aws_acm_pca_certificate_authority_certificate" "this" {
-  certificate_authority_arn = aws_acm_pca_certificate_authority.this.arn
+resource "aws_acmpca_certificate_authority_certificate" "this" {
+  certificate_authority_arn = aws_acmpca_certificate_authority.this.arn
   certificate       = aws_acmpca_certificate.this.certificate
   certificate_chain = aws_acmpca_certificate.this.certificate_chain
 }
