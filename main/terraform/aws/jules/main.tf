@@ -10,7 +10,7 @@ resource "aws_ecs_account_setting_default" "trunking" {
 }
 
 resource "time_sleep" "wait_for_trunking" {
-  create_duration = "60s"
+  create_duration = "30s"
   depends_on      = [aws_ecs_account_setting_default.trunking]
 }
 
@@ -256,17 +256,14 @@ module "autoscaling" {
   use_mixed_instances_policy = true
   mixed_instances_policy = {
     instances_distribution = {
-      on_demand_base_capacity                  = 2
+      on_demand_base_capacity                  = 1
       on_demand_percentage_above_base_capacity = 50
       spot_allocation_strategy                 = "price-capacity-optimized"
     }
 
     override = [
       {
-        instance_type = "t3a.medium"
-      },
-      {
-        instance_type = "t3.medium"
+        instance_type = "m6a.large"
       }
     ]
   }
@@ -291,8 +288,8 @@ module "autoscaling" {
   vpc_zone_identifier = module.vpc.private_subnets
   health_check_type   = "EC2"
   min_size            = 1
-  max_size            = 6
-  desired_capacity    = 2
+  max_size            = 3
+  desired_capacity    = 1
 
   # https://github.com/hashicorp/terraform-provider-aws/issues/12582
   autoscaling_group_tags = {
@@ -348,8 +345,8 @@ module "frontend" {
   create_tasks_iam_role = false
   create_security_group = false
 
-  cpu          = 180
-  memory       = 300
+  cpu          = 140
+  memory       = 450
   network_mode = "awsvpc"
 
   container_definitions = {
@@ -417,8 +414,8 @@ module "microservices" {
   create_tasks_iam_role = false
   create_security_group = false
 
-  cpu          = 180
-  memory       = 300
+  cpu          = 140
+  memory       = 450
   network_mode = "awsvpc"
 
   container_definitions = {
