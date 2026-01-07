@@ -378,10 +378,12 @@ module "frontend" {
     service = {
       discovery_name = "frontend-sc"
       port_name      = "frontend-8080-tcp"
-      client_alias = {
-        port     = 8080
-        dns_name = "frontend-sc"
-      }
+      client_alias = [
+        {
+          port     = 8080
+          dns_name = "frontend-sc"
+        }
+      ]
     }
 
     tls = {
@@ -478,10 +480,12 @@ module "microservices" {
     service = try(each.value.port, null) != null ? {
       discovery_name = "${each.key}-sc"
       port_name      = "${each.key}-${each.value.port}-tcp"
-      client_alias = {
-        port     = each.value.port
-        dns_name = "${each.key}-sc"
-      }
+      client_alias = [
+        {
+          port     = each.value.port
+          dns_name = "${each.key}-sc"
+        }
+      ]
     } : null
 
     tls = {

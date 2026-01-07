@@ -49,7 +49,7 @@ resource "aws_iam_policy" "service_connect_tls" {
           "kms:Decrypt"
         ]
         Resource = [
-          "arn:aws:secretsmanager:${var.region}:${data.aws_caller_identity.current.account_id}:secret:ecs-sc!*",
+          "arn:aws:secretsmanager:${var.region}:${data.aws_caller_identity.current.account_id}:secret:ecs-sc*",
           "arn:aws:kms:${var.region}:${data.aws_caller_identity.current.account_id}:key/*"
         ]
       }
