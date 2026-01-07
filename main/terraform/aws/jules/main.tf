@@ -318,7 +318,7 @@ module "frontend" {
   source  = "terraform-aws-modules/ecs/aws//modules/service"
   version = "~> 5.11"
 
-  name        = "${var.project_name}-${terraform.workspace}-frontend"
+  name        = "${var.project_name}-${terraform.workspace}-frontend-v2"
   cluster_arn = module.ecs.cluster_arn
 
   # IAM Role for Service Connect TLS (Private CA)
@@ -424,7 +424,7 @@ module "microservices" {
 
   for_each = local.services
 
-  name        = "${var.project_name}-${terraform.workspace}-${each.key}"
+  name        = "${var.project_name}-${terraform.workspace}-${each.key}-v2"
   cluster_arn = module.ecs.cluster_arn
 
   # IAM Role for Service Connect TLS (Private CA)
