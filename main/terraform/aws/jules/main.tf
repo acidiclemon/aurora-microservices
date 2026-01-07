@@ -70,14 +70,14 @@ locals {
     shippingservice = {
       port = 50051
     }
-    loadgenerator = {
-      # No port needed for service definition, but task needs envs
-      container_port = 80 # dummy port
-      env = [
-        { name = "FRONTEND_ADDR", value = module.alb.dns_name },
-        { name = "USERS", value = "10" }
-      ]
-    }
+    # loadgenerator = {
+    #   # No port needed for service definition, but task needs envs
+    #   container_port = 80 # dummy port
+    #   env = [
+    #     { name = "FRONTEND_ADDR", value = module.alb.dns_name },
+    #     { name = "USERS", value = "10" }
+    #   ]
+    # }
     # Shopping Assistant is skipped/commented out logic handled by not including it here
   }
 }
