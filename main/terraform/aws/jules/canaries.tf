@@ -110,8 +110,8 @@ data "archive_file" "canary_health" {
 }
 
 locals {
-  # Determine base URL: If domain is set, use it; otherwise use ALB DNS
-  base_url = var.domain_name != "" ? "https://${var.project_name}-${terraform.workspace}.${var.domain_name}" : "http://${module.alb.dns_name}"
+  # Determine base URL: If domain is set, use it; otherwise use CloudFront URL (ALB is private)
+  base_url = var.domain_name != "" ? "https://${var.project_name}-${terraform.workspace}.${var.domain_name}" : "https://${aws_cloudfront_distribution.this.domain_name}"
 }
 
 # Canary 1: Home Page
