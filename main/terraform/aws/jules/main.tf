@@ -378,13 +378,14 @@ module "frontend" {
     service = {
       discovery_name = "frontend-sc"
       port_name      = "frontend-8080-tcp"
-      client_alias = [
-        {
-          port     = 8080
-          dns_name = "frontend-sc"
-        }
-      ]
+      client_alias = {
+        port     = 8080
+        dns_name = "frontend-sc"
+      }
     }
+
+    tasks_iam_role_use_name_prefix     = false
+    task_exec_iam_role_use_name_prefix = false
 
     tls = {
       issuer_cert_authority = {
@@ -480,13 +481,14 @@ module "microservices" {
     service = try(each.value.port, null) != null ? {
       discovery_name = "${each.key}-sc"
       port_name      = "${each.key}-${each.value.port}-tcp"
-      client_alias = [
-        {
-          port     = each.value.port
-          dns_name = "${each.key}-sc"
-        }
-      ]
+      client_alias = {
+        port     = each.value.port
+        dns_name = "${each.key}-sc"
+      }
     } : null
+
+    tasks_iam_role_use_name_prefix     = false
+    task_exec_iam_role_use_name_prefix = false
 
     tls = {
       issuer_cert_authority = {
