@@ -5,6 +5,7 @@ import os
 
 def handler(event, context):
     logger.info("Handler started for PRODUCT canary")
+    driver = None
     try:
         url = os.environ.get("URL")
         if not url:
@@ -36,4 +37,10 @@ def handler(event, context):
         }
     except Exception as e:
         logger.error("Canary failed: %s" % str(e))
+        try:
+            if driver:
+                driver.save_screenshot("/tmp/failed.png")
+                logger.info("Screenshot saved to /tmp/failed.png")
+        except Exception as se:
+            logger.error("Failed to take screenshot: %s" % str(se))
         raise e
