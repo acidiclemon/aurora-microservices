@@ -129,7 +129,7 @@ resource "aws_synthetics_canary" "home" {
   execution_role_arn   = aws_iam_role.canary_role.arn
   handler              = "home.handler"
   zip_file             = data.archive_file.canary_home.output_path
-  runtime_version      = "syn-python-selenium-3.0"
+  runtime_version      = "syn-python-selenium-8.0"
   start_canary         = true
 
   schedule {
@@ -151,7 +151,7 @@ resource "aws_synthetics_canary" "product" {
   execution_role_arn   = aws_iam_role.canary_role.arn
   handler              = "product.handler"
   zip_file             = data.archive_file.canary_product.output_path
-  runtime_version      = "syn-python-selenium-3.0"
+  runtime_version      = "syn-python-selenium-8.0"
   start_canary         = true
 
   schedule {
@@ -173,7 +173,7 @@ resource "aws_synthetics_canary" "cart" {
   execution_role_arn   = aws_iam_role.canary_role.arn
   handler              = "cart.handler"
   zip_file             = data.archive_file.canary_cart.output_path
-  runtime_version      = "syn-python-selenium-3.0"
+  runtime_version      = "syn-python-selenium-8.0"
   start_canary         = true
 
   schedule {
@@ -195,7 +195,7 @@ resource "aws_synthetics_canary" "health" {
   execution_role_arn   = aws_iam_role.canary_role.arn
   handler              = "health.handler"
   zip_file             = data.archive_file.canary_health.output_path
-  runtime_version      = "syn-python-selenium-3.0"
+  runtime_version      = "syn-python-selenium-8.0"
   start_canary         = true
 
   schedule {
