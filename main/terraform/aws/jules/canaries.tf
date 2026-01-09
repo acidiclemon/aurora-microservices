@@ -53,13 +53,19 @@ resource "aws_iam_role_policy" "canary_policy" {
         Action = [
           "s3:PutObject",
           "s3:GetObject",
-          "s3:GetBucketLocation",
-          "s3:ListAllMyBuckets"
+          "s3:GetBucketLocation"
         ]
         Resource = [
           aws_s3_bucket.canary_artifacts.arn,
           "${aws_s3_bucket.canary_artifacts.arn}/*"
         ]
+      },
+      {
+        Effect = "Allow"
+        Action = [
+          "s3:ListAllMyBuckets"
+        ]
+        Resource = "*"
       },
       {
         Effect = "Allow"
