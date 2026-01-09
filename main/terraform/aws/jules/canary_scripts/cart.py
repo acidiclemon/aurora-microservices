@@ -17,10 +17,10 @@ def handler(event, context):
 
         # Check for Cart text
         if "Cart" not in driver.page_source and "Shopping Cart" not in driver.page_source:
-             driver.save_screenshot("/tmp/failure.png")
+             # Synthetics automatically captures screenshots on failure
              raise Exception("Cart page did not load correctly")
 
-        driver.save_screenshot("/tmp/screenshot.png")
+        # Removed manual screenshot
 
         logger.info("Page loaded successfully")
         return {

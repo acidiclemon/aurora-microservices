@@ -20,15 +20,14 @@ def handler(event, context):
             # Wait/Check for h2 tag
             product_name = driver.find_element(By.TAG_NAME, "h2").text
             logger.info("Found product: %s" % product_name)
-            # Relaxed check: Just ensure page has content
         except Exception as e:
             logger.warn("Could not find H2 tag, checking page source")
 
         if "Sunglasses" not in driver.page_source and "Vintage Typewriter" not in driver.page_source:
-             driver.save_screenshot("/tmp/failure.png")
+             # Synthetics automatically captures screenshots on failure
              raise Exception("Expected product content not found on page")
 
-        driver.save_screenshot("/tmp/screenshot.png")
+        # Removed manual screenshot
 
         logger.info("Page loaded successfully")
         return {

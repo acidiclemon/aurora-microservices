@@ -19,10 +19,10 @@ def handler(event, context):
         title = driver.title
         logger.info("Page title: %s" % title)
         if "Online Boutique" not in title:
-             driver.save_screenshot("/tmp/failure.png")
+             # Synthetics automatically captures screenshots on failure
              raise Exception("Page title does not match. Expected 'Online Boutique', got: %s" % title)
 
-        driver.save_screenshot("/tmp/screenshot.png")
+        # Removed manual screenshot to avoid runtime bug in syn-python-selenium-8.0
 
         logger.info("Page loaded successfully")
         return {
