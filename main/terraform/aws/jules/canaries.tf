@@ -123,16 +123,6 @@ data "archive_file" "canary_cart" {
   }
 }
 
-data "archive_file" "canary_health" {
-  type        = "zip"
-  output_path = "${path.module}/canary_scripts/health.zip"
-
-  source {
-    content  = file("${path.module}/canary_scripts/health.py")
-    filename = "python/health.py"
-  }
-}
-
 locals {
   # Determine base URL: If domain is set, use it; otherwise use CloudFront URL (ALB is private)
   base_url = var.domain_name != "" ? "https://${var.project_name}-${terraform.workspace}.${var.domain_name}" : "https://${aws_cloudfront_distribution.this.domain_name}"
@@ -140,7 +130,7 @@ locals {
 
 # Canary 1: Home Page
 resource "aws_synthetics_canary" "home" {
-  name                 = "canary-${substr(md5("${var.project_name}-${terraform.workspace}"), 0, 8)}-home"
+  name                 = substr("${var.project_name}-${terraform.workspace}-home", 0, 21)
   artifact_s3_location = "s3://${aws_s3_bucket.canary_artifacts.bucket}/home"
   execution_role_arn   = aws_iam_role.canary_role.arn
   handler              = "home.handler"
@@ -162,7 +152,7 @@ resource "aws_synthetics_canary" "home" {
 
 # Canary 2: Product Page (Microservice 1: ProductCatalog)
 resource "aws_synthetics_canary" "product" {
-  name                 = "canary-${substr(md5("${var.project_name}-${terraform.workspace}"), 0, 8)}-prod"
+  name                 = substr("${var.project_name}-${terraform.workspace}-prod", 0, 21)
   artifact_s3_location = "s3://${aws_s3_bucket.canary_artifacts.bucket}/product"
   execution_role_arn   = aws_iam_role.canary_role.arn
   handler              = "product.handler"
@@ -184,7 +174,7 @@ resource "aws_synthetics_canary" "product" {
 
 # Canary 3: Cart Page (Microservice 2: Cart)
 resource "aws_synthetics_canary" "cart" {
-  name                 = "canary-${substr(md5("${var.project_name}-${terraform.workspace}"), 0, 8)}-cart"
+  name                 = substr("${var.project_name}-${terraform.workspace}-cart", 0, 21)
   artifact_s3_location = "s3://${aws_s3_bucket.canary_artifacts.bucket}/cart"
   execution_role_arn   = aws_iam_role.canary_role.arn
   handler              = "cart.handler"
@@ -200,28 +190,6 @@ resource "aws_synthetics_canary" "cart" {
     timeout_in_seconds = 60
     environment_variables = {
       URL = "${local.base_url}/cart"
-    }
-  }
-}
-
-# Canary 4: Health Check (Microservice 3: Frontend Health)
-resource "aws_synthetics_canary" "health" {
-  name                 = "canary-${substr(md5("${var.project_name}-${terraform.workspace}"), 0, 8)}-hlth"
-  artifact_s3_location = "s3://${aws_s3_bucket.canary_artifacts.bucket}/health"
-  execution_role_arn   = aws_iam_role.canary_role.arn
-  handler              = "health.handler"
-  zip_file             = data.archive_file.canary_health.output_path
-  runtime_version      = "syn-python-selenium-8.0"
-  start_canary         = true
-
-  schedule {
-    expression = "rate(3 minutes)"
-  }
-
-  run_config {
-    timeout_in_seconds = 60
-    environment_variables = {
-      URL = "${local.base_url}/_healthz"
     }
   }
 }
