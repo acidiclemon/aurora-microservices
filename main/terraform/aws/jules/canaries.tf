@@ -99,7 +99,7 @@ data "archive_file" "canary_home" {
 
   source {
     content  = file("${path.module}/canary_scripts/home.py")
-    filename = "home.py"
+    filename = "python/home.py"
   }
 }
 
@@ -109,7 +109,7 @@ data "archive_file" "canary_product" {
 
   source {
     content  = file("${path.module}/canary_scripts/product.py")
-    filename = "product.py"
+    filename = "python/product.py"
   }
 }
 
@@ -119,7 +119,7 @@ data "archive_file" "canary_cart" {
 
   source {
     content  = file("${path.module}/canary_scripts/cart.py")
-    filename = "cart.py"
+    filename = "python/cart.py"
   }
 }
 
@@ -129,7 +129,7 @@ data "archive_file" "canary_health" {
 
   source {
     content  = file("${path.module}/canary_scripts/health.py")
-    filename = "health.py"
+    filename = "python/health.py"
   }
 }
 
