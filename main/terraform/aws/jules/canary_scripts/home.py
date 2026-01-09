@@ -4,25 +4,31 @@ from selenium.webdriver.common.by import By
 import os
 
 def handler(event, context):
-    url = os.environ.get("URL")
-    if not url:
-        raise ValueError("URL environment variable is not set")
+    logger.info("Handler started for HOME canary")
+    try:
+        url = os.environ.get("URL")
+        if not url:
+            raise ValueError("URL environment variable is not set")
 
-    driver = syn_webdriver.Chrome()
+        driver = syn_webdriver.Chrome()
 
-    logger.info("Navigating to URL: %s" % url)
-    driver.get(url)
+        logger.info("Navigating to URL: %s" % url)
+        driver.get(url)
 
-    # Assert title to ensure page loaded correctly
-    title = driver.title
-    if "Online Boutique" not in title:
-         driver.save_screenshot("/tmp/failure.png")
-         raise Exception("Page title does not match. Expected 'Online Boutique', got: %s" % title)
+        # Assert title to ensure page loaded correctly
+        title = driver.title
+        logger.info("Page title: %s" % title)
+        if "Online Boutique" not in title:
+             driver.save_screenshot("/tmp/failure.png")
+             raise Exception("Page title does not match. Expected 'Online Boutique', got: %s" % title)
 
-    driver.save_screenshot("/tmp/screenshot.png")
+        driver.save_screenshot("/tmp/screenshot.png")
 
-    logger.info("Page loaded successfully")
-    return {
-        "statusCode": 200,
-        "statusText": "OK"
-    }
+        logger.info("Page loaded successfully")
+        return {
+            "statusCode": 200,
+            "statusText": "OK"
+        }
+    except Exception as e:
+        logger.error("Canary failed: %s" % str(e))
+        raise e

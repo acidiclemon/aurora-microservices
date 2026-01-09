@@ -95,26 +95,42 @@ resource "aws_iam_role_policy" "canary_policy" {
 # Zip Scripts
 data "archive_file" "canary_home" {
   type        = "zip"
-  source_file = "${path.module}/canary_scripts/home.py"
   output_path = "${path.module}/canary_scripts/home.zip"
+
+  source {
+    content  = file("${path.module}/canary_scripts/home.py")
+    filename = "home.py"
+  }
 }
 
 data "archive_file" "canary_product" {
   type        = "zip"
-  source_file = "${path.module}/canary_scripts/product.py"
   output_path = "${path.module}/canary_scripts/product.zip"
+
+  source {
+    content  = file("${path.module}/canary_scripts/product.py")
+    filename = "product.py"
+  }
 }
 
 data "archive_file" "canary_cart" {
   type        = "zip"
-  source_file = "${path.module}/canary_scripts/cart.py"
   output_path = "${path.module}/canary_scripts/cart.zip"
+
+  source {
+    content  = file("${path.module}/canary_scripts/cart.py")
+    filename = "cart.py"
+  }
 }
 
 data "archive_file" "canary_health" {
   type        = "zip"
-  source_file = "${path.module}/canary_scripts/health.py"
   output_path = "${path.module}/canary_scripts/health.zip"
+
+  source {
+    content  = file("${path.module}/canary_scripts/health.py")
+    filename = "health.py"
+  }
 }
 
 locals {
