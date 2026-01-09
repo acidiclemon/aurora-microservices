@@ -149,7 +149,7 @@ resource "aws_synthetics_canary" "home" {
   start_canary         = true
 
   schedule {
-    expression = "rate(5 minutes)"
+    expression = "rate(3 minutes)"
   }
 
   run_config {
@@ -171,7 +171,7 @@ resource "aws_synthetics_canary" "product" {
   start_canary         = true
 
   schedule {
-    expression = "rate(5 minutes)"
+    expression = "rate(3 minutes)"
   }
 
   run_config {
@@ -193,7 +193,7 @@ resource "aws_synthetics_canary" "cart" {
   start_canary         = true
 
   schedule {
-    expression = "rate(5 minutes)"
+    expression = "rate(3 minutes)"
   }
 
   run_config {
@@ -215,7 +215,7 @@ resource "aws_synthetics_canary" "health" {
   start_canary         = true
 
   schedule {
-    expression = "rate(5 minutes)"
+    expression = "rate(3 minutes)"
   }
 
   run_config {
