@@ -15,6 +15,8 @@ resource "aws_s3_bucket_lifecycle_configuration" "canary_artifacts" {
     id     = "expire-old-artifacts"
     status = "Enabled"
 
+    filter {}
+
     expiration {
       days = 30
     }
