@@ -145,7 +145,9 @@ resource "aws_synthetics_canary" "home" {
   run_config {
     timeout_in_seconds = 60
     environment_variables = {
-      URL = local.base_url
+      URL                = local.base_url
+      ARTIFACT_S3_BUCKET = aws_s3_bucket.canary_artifacts.bucket
+      CANARY_NAME        = "home"
     }
   }
 }
@@ -167,7 +169,9 @@ resource "aws_synthetics_canary" "product" {
   run_config {
     timeout_in_seconds = 60
     environment_variables = {
-      URL = "${local.base_url}/product/OLJCESPC7Z"
+      URL                = "${local.base_url}/product/OLJCESPC7Z"
+      ARTIFACT_S3_BUCKET = aws_s3_bucket.canary_artifacts.bucket
+      CANARY_NAME        = "product"
     }
   }
 }
@@ -189,7 +193,9 @@ resource "aws_synthetics_canary" "cart" {
   run_config {
     timeout_in_seconds = 60
     environment_variables = {
-      URL = "${local.base_url}/cart"
+      URL                = "${local.base_url}/cart"
+      ARTIFACT_S3_BUCKET = aws_s3_bucket.canary_artifacts.bucket
+      CANARY_NAME        = "cart"
     }
   }
 }
