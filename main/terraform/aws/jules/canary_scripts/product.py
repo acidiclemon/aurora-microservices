@@ -42,23 +42,30 @@ def handler(event, context):
         try:
             if driver:
                 screenshot_path = "/tmp/failed.png"
-                driver.save_screenshot(screenshot_path)
-                logger.info("Screenshot saved to %s" % screenshot_path)
+                logger.info("Taking screenshot using get_screenshot_as_png")
+                png_data = driver.get_screenshot_as_png()
+                with open(screenshot_path, "wb") as f:
+                    f.write(png_data)
 
-                # Manual upload to S3 to ensure visibility
-                bucket = os.environ.get("ARTIFACT_S3_BUCKET")
-                canary_name = os.environ.get("CANARY_NAME")
+                if os.path.exists(screenshot_path):
+                    logger.info("Screenshot successfully written to %s" % screenshot_path)
 
-                logger.info("Env Check: BUCKET=%s, CANARY_NAME=%s" % (bucket, canary_name))
+                    # Manual upload to S3 to ensure visibility
+                    bucket = os.environ.get("ARTIFACT_S3_BUCKET")
+                    canary_name = os.environ.get("CANARY_NAME")
 
-                if bucket and canary_name:
-                    s3 = boto3.client('s3')
-                    key = "FAILED_SCREENSHOT_%s_%s.png" % (canary_name, str(uuid.uuid4()))
-                    logger.info("Attempting upload to s3://%s/%s" % (bucket, key))
-                    s3.upload_file(screenshot_path, bucket, key)
-                    logger.info("Upload successful")
+                    logger.info("Env Check: BUCKET=%s, CANARY_NAME=%s" % (bucket, canary_name))
+
+                    if bucket and canary_name:
+                        s3 = boto3.client('s3')
+                        key = "FAILED_SCREENSHOT_%s_%s.png" % (canary_name, str(uuid.uuid4()))
+                        logger.info("Attempting upload to s3://%s/%s" % (bucket, key))
+                        s3.upload_file(screenshot_path, bucket, key)
+                        logger.info("Upload successful")
+                    else:
+                        logger.error("Missing environment variables for S3 upload")
                 else:
-                    logger.error("Missing environment variables for S3 upload")
+                    logger.error("File %s does not exist after write attempt" % screenshot_path)
         except Exception as se:
             logger.error("Failed to take/upload screenshot: %s" % str(se))
         raise e
