@@ -22,7 +22,7 @@ def handler(event, context):
             product_name = driver.find_element(By.TAG_NAME, "h2").text
             logger.info("Found product: %s" % product_name)
         except Exception as e:
-            logger.warn("Could not find H2 tag, checking page source")
+            logger.warning("Could not find H2 tag, checking page source")
 
         if "Sunglasses" not in driver.page_source and "Vintage Typewriter" not in driver.page_source:
              # Synthetics automatically captures screenshots on failure
