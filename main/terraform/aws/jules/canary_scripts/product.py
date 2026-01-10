@@ -3,6 +3,7 @@ from aws_synthetics.common import synthetics_logger as logger
 from selenium.webdriver.common.by import By
 import os
 import boto3
+import uuid
 
 def handler(event, context):
     logger.info("Handler started for PRODUCT canary")
@@ -47,11 +48,17 @@ def handler(event, context):
                 # Manual upload to S3 to ensure visibility
                 bucket = os.environ.get("ARTIFACT_S3_BUCKET")
                 canary_name = os.environ.get("CANARY_NAME")
+
+                logger.info("Env Check: BUCKET=%s, CANARY_NAME=%s" % (bucket, canary_name))
+
                 if bucket and canary_name:
                     s3 = boto3.client('s3')
-                    key = "failed_screenshots/%s/%s.png" % (canary_name, context.aws_request_id)
+                    key = "FAILED_SCREENSHOT_%s_%s.png" % (canary_name, str(uuid.uuid4()))
+                    logger.info("Attempting upload to s3://%s/%s" % (bucket, key))
                     s3.upload_file(screenshot_path, bucket, key)
-                    logger.info("Manually uploaded screenshot to s3://%s/%s" % (bucket, key))
+                    logger.info("Upload successful")
+                else:
+                    logger.error("Missing environment variables for S3 upload")
         except Exception as se:
             logger.error("Failed to take/upload screenshot: %s" % str(se))
         raise e
