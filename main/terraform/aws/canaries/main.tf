@@ -1,3 +1,9 @@
+provider "aws" {
+  region = var.region
+}
+
+data "aws_caller_identity" "current" {}
+
 ################################################################################
 # CloudWatch Synthetics Canaries
 ################################################################################
@@ -123,11 +129,6 @@ data "archive_file" "canary_cart" {
   }
 }
 
-locals {
-  # Determine base URL: If domain is set, use it; otherwise use CloudFront URL (ALB is private)
-  base_url = var.domain_name != "" ? "https://${var.project_name}-${terraform.workspace}.${var.domain_name}" : "https://${aws_cloudfront_distribution.this.domain_name}"
-}
-
 # Canary 1: Home Page
 resource "aws_synthetics_canary" "home" {
   name                 = substr("${var.project_name}-${terraform.workspace}-home", 0, 21)
@@ -145,7 +146,7 @@ resource "aws_synthetics_canary" "home" {
   run_config {
     timeout_in_seconds = 60
     environment_variables = {
-      URL                = local.base_url
+      URL                = var.app_url
       ARTIFACT_S3_BUCKET = aws_s3_bucket.canary_artifacts.bucket
       CANARY_NAME        = "home"
     }
@@ -169,7 +170,7 @@ resource "aws_synthetics_canary" "product" {
   run_config {
     timeout_in_seconds = 60
     environment_variables = {
-      URL                = "${local.base_url}/product/OLJCESPC7Z"
+      URL                = "${var.app_url}/product/OLJCESPC7Z"
       ARTIFACT_S3_BUCKET = aws_s3_bucket.canary_artifacts.bucket
       CANARY_NAME        = "product"
     }
@@ -193,7 +194,7 @@ resource "aws_synthetics_canary" "cart" {
   run_config {
     timeout_in_seconds = 60
     environment_variables = {
-      URL                = "${local.base_url}/cart"
+      URL                = "${var.app_url}/cart"
       ARTIFACT_S3_BUCKET = aws_s3_bucket.canary_artifacts.bucket
       CANARY_NAME        = "cart"
     }
