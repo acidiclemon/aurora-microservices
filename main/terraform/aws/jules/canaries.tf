@@ -140,7 +140,7 @@ resource "aws_synthetics_canary" "home" {
 
   depends_on = [
     aws_cloudfront_distribution.this,
-    aws_lb.this
+    module.alb
   ]
 
   schedule {
@@ -169,7 +169,7 @@ resource "aws_synthetics_canary" "product" {
 
   depends_on = [
     aws_cloudfront_distribution.this,
-    aws_lb.this
+    module.alb
   ]
 
   schedule {
@@ -198,7 +198,7 @@ resource "aws_synthetics_canary" "cart" {
 
   depends_on = [
     aws_cloudfront_distribution.this,
-    aws_lb.this
+    module.alb
   ]
 
   schedule {
