@@ -2,7 +2,6 @@ from aws_synthetics.selenium import synthetics_webdriver as syn_webdriver
 from aws_synthetics.common import synthetics_logger as logger
 from selenium.webdriver.common.by import By
 import os
-import boto3
 import uuid
 
 def handler(event, context):
@@ -18,54 +17,40 @@ def handler(event, context):
         logger.info("Navigating to URL: %s" % url)
         driver.get(url)
 
-        # Check for specific product name
+        # Optional: Try to extract and log the product name from h2 (for better observability)
         try:
-            # Wait/Check for h2 tag
-            product_name = driver.find_element(By.TAG_NAME, "h2").text
-            logger.info("Found product: %s" % product_name)
+            product_name_element = driver.find_element(By.TAG_NAME, "h2")
+            product_name = product_name_element.text.strip()
+            logger.info("Found product name in h2: %s" % product_name)
         except Exception as e:
-            logger.warning("Could not find H2 tag, checking page source")
+            logger.warning("Could not find or read h2 tag for product name: %s" % str(e))
 
+        # Main check for expected product content
         if "Sunglasses" not in driver.page_source and "Vintage Typewriter" not in driver.page_source:
-             # Synthetics automatically captures screenshots on failure
-             raise Exception("Expected product content not found on page")
+            raise Exception("Expected product content not found on page")
 
-        # Removed manual screenshot
-
-        logger.info("Page loaded successfully")
+        logger.info("Page loaded successfully with expected product content")
         return {
             "statusCode": 200,
             "statusText": "OK"
         }
     except Exception as e:
         logger.error("Canary failed: %s" % str(e))
+
+        # Take screenshot ONLY on failure
         try:
             if driver:
-                screenshot_path = "/tmp/failed.png"
-                logger.info("Taking screenshot using get_screenshot_as_png")
-                png_data = driver.get_screenshot_as_png()
-                with open(screenshot_path, "wb") as f:
-                    f.write(png_data)
-
-                if os.path.exists(screenshot_path):
-                    logger.info("Screenshot successfully written to %s" % screenshot_path)
-
-                    # Manual upload to S3 to ensure visibility
-                    bucket = os.environ.get("ARTIFACT_S3_BUCKET")
-                    canary_name = os.environ.get("CANARY_NAME")
-
-                    logger.info("Env Check: BUCKET=%s, CANARY_NAME=%s" % (bucket, canary_name))
-
-                    if bucket and canary_name:
-                        s3 = boto3.client('s3')
-                        key = "FAILED_SCREENSHOT_%s_%s.png" % (canary_name, str(uuid.uuid4()))
-                        logger.info("Attempting upload to s3://%s/%s" % (bucket, key))
-                        s3.upload_file(screenshot_path, bucket, key)
-                        logger.info("Upload successful")
-                    else:
-                        logger.error("Missing environment variables for S3 upload")
-                else:
-                    logger.error("File %s does not exist after write attempt" % screenshot_path)
+                failure_screenshot_name = f"product_canary_failure_{str(uuid.uuid4())[:8]}"
+                driver.save_screenshot(failure_screenshot_name)
+                logger.info(f"Failure screenshot taken: {failure_screenshot_name}.png")
         except Exception as se:
-            logger.error("Failed to take/upload screenshot: %s" % str(se))
-        raise e
+            logger.error("Failed to take failure screenshot: %s" % str(se))
+
+        raise e  # Re-raise to mark canary as failed
+    finally:
+        if driver:
+            try:
+                driver.quit()
+                logger.info("Driver quit successfully")
+            except Exception as qe:
+                logger.error("Error quitting driver: %s" % str(qe))
