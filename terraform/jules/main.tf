@@ -401,6 +401,8 @@ module "frontend" {
   security_group_ids = [module.ecs_sg.security_group_id]
 
   force_delete = true
+
+  depends_on = [module.ecs]
 }
 
 # Backend Services (Loop)
@@ -462,6 +464,8 @@ module "microservices" {
   security_group_ids = [module.ecs_sg.security_group_id]
 
   force_delete = true
+
+  depends_on = [module.ecs]
 }
 
 ################################################################################
