@@ -30,6 +30,8 @@ resource "aws_cloudwatch_log_metric_filter" "frontend_errors" {
       Service = "frontend"
     }
   }
+
+  depends_on = [module.frontend]
 }
 
 resource "aws_cloudwatch_log_metric_filter" "checkout_errors" {
@@ -46,6 +48,8 @@ resource "aws_cloudwatch_log_metric_filter" "checkout_errors" {
       Service = "checkoutservice"
     }
   }
+
+  depends_on = [module.microservices]
 }
 
 resource "aws_cloudwatch_log_metric_filter" "payment_errors" {
@@ -62,6 +66,8 @@ resource "aws_cloudwatch_log_metric_filter" "payment_errors" {
       Service = "paymentservice"
     }
   }
+
+  depends_on = [module.microservices]
 }
 
 # ------------------------------------------------------------------------------
