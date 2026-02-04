@@ -19,7 +19,7 @@ data "aws_lb" "selected" {
 resource "aws_cloudwatch_log_metric_filter" "frontend_errors" {
   name           = "FrontendErrors"
   pattern        = "?ERROR ?Exception"
-  log_group_name = module.frontend.cloudwatch_log_group_name
+  log_group_name = "/aws/ecs/${module.frontend.name}"
 
   metric_transformation {
     name          = "ErrorCount"
@@ -35,7 +35,7 @@ resource "aws_cloudwatch_log_metric_filter" "frontend_errors" {
 resource "aws_cloudwatch_log_metric_filter" "checkout_errors" {
   name           = "CheckoutErrors"
   pattern        = "?ERROR ?Exception"
-  log_group_name = module.microservices["checkoutservice"].cloudwatch_log_group_name
+  log_group_name = "/aws/ecs/${module.microservices["checkoutservice"].name}"
 
   metric_transformation {
     name          = "ErrorCount"
@@ -51,7 +51,7 @@ resource "aws_cloudwatch_log_metric_filter" "checkout_errors" {
 resource "aws_cloudwatch_log_metric_filter" "payment_errors" {
   name           = "PaymentErrors"
   pattern        = "?ERROR ?Exception"
-  log_group_name = module.microservices["paymentservice"].cloudwatch_log_group_name
+  log_group_name = "/aws/ecs/${module.microservices["paymentservice"].name}"
 
   metric_transformation {
     name          = "ErrorCount"
