@@ -370,7 +370,9 @@ module "frontend" {
         { name = "SHIPPING_SERVICE_ADDR", value = "${var.project_name}-${terraform.workspace}-shippingservice.${var.project_name}-${terraform.workspace}.private:50051" },
         { name = "CHECKOUT_SERVICE_ADDR", value = "${var.project_name}-${terraform.workspace}-checkoutservice.${var.project_name}-${terraform.workspace}.private:5050" },
         { name = "AD_SERVICE_ADDR", value = "${var.project_name}-${terraform.workspace}-adservice.${var.project_name}-${terraform.workspace}.private:9555" },
-        { name = "SHOPPING_ASSISTANT_SERVICE_ADDR", value = "${var.project_name}-${terraform.workspace}-shoppingassistantservice.${var.project_name}-${terraform.workspace}.private:8080" }
+        { name = "SHOPPING_ASSISTANT_SERVICE_ADDR", value = "${var.project_name}-${terraform.workspace}-shoppingassistantservice.${var.project_name}-${terraform.workspace}.private:8080" },
+        { name = "ENABLE_TRACING", value = "1" },
+        { name = "COLLECTOR_SERVICE_ADDR", value = "collector.${var.project_name}-${terraform.workspace}.private:4317" }
       ]
       # Using CloudWatch log group created by the module
       enable_cloudwatch_logging = true
@@ -399,6 +401,8 @@ module "frontend" {
   security_group_ids = [module.ecs_sg.security_group_id]
 
   force_delete = true
+
+  depends_on = [module.ecs]
 }
 
 # Backend Services (Loop)
@@ -460,6 +464,8 @@ module "microservices" {
   security_group_ids = [module.ecs_sg.security_group_id]
 
   force_delete = true
+
+  depends_on = [module.ecs]
 }
 
 ################################################################################
