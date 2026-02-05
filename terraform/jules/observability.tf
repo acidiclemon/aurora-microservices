@@ -42,7 +42,6 @@ resource "aws_cloudwatch_log_metric_filter" "frontend_errors" {
     name          = "ErrorCount"
     namespace     = local.metric_namespace
     value         = "1"
-    default_value = "0"
     dimensions = {
       Service = "frontend"
     }
@@ -58,7 +57,6 @@ resource "aws_cloudwatch_log_metric_filter" "checkout_errors" {
     name          = "ErrorCount"
     namespace     = local.metric_namespace
     value         = "1"
-    default_value = "0"
     dimensions = {
       Service = "checkoutservice"
     }
@@ -74,7 +72,6 @@ resource "aws_cloudwatch_log_metric_filter" "payment_errors" {
     name          = "ErrorCount"
     namespace     = local.metric_namespace
     value         = "1"
-    default_value = "0"
     dimensions = {
       Service = "paymentservice"
     }
