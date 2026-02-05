@@ -396,6 +396,14 @@ module "frontend" {
     }
   }
 
+  desired_count = var.enable_ha ? 2 : 1
+  ordered_placement_strategy = var.enable_ha ? [
+    {
+      type  = "spread"
+      field = "attribute:ecs.availability-zone"
+    }
+  ] : []
+
   capacity_provider_strategy = {
     "${var.project_name}-${terraform.workspace}-microservices" = {
       capacity_provider = "${var.project_name}-${terraform.workspace}-microservices"
@@ -467,6 +475,14 @@ module "microservices" {
   service_registries = {
     registry_arn = aws_service_discovery_service.this[each.key].arn
   }
+
+  desired_count = var.enable_ha ? 2 : 1
+  ordered_placement_strategy = var.enable_ha ? [
+    {
+      type  = "spread"
+      field = "attribute:ecs.availability-zone"
+    }
+  ] : []
 
   capacity_provider_strategy = {
     "${var.project_name}-${terraform.workspace}-microservices" = {

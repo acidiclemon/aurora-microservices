@@ -86,3 +86,9 @@ variable "acm_certificate_id" {
   type        = string
   default     = "d3e5a80f-a4a7-4ff7-85bd-e33dad5a507b"
 }
+
+variable "enable_ha" {
+  description = "Enable High Availability (2 tasks per service, spread across AZs)"
+  type        = bool
+  default     = false
+}
