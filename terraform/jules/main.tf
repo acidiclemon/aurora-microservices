@@ -387,6 +387,10 @@ module "frontend" {
     }
   }
 
+  # Explicitly managed log group in observability.tf
+  create_cloudwatch_log_group = false
+  cloudwatch_log_group_name   = aws_cloudwatch_log_group.frontend.name
+
   capacity_provider_strategy = {
     "${var.project_name}-${terraform.workspace}-microservices" = {
       capacity_provider = "${var.project_name}-${terraform.workspace}-microservices"
@@ -449,6 +453,10 @@ module "microservices" {
   service_registries = {
     registry_arn = aws_service_discovery_service.this[each.key].arn
   }
+
+  # Explicitly managed log group in observability.tf
+  create_cloudwatch_log_group = false
+  cloudwatch_log_group_name   = aws_cloudwatch_log_group.microservices[each.key].name
 
   capacity_provider_strategy = {
     "${var.project_name}-${terraform.workspace}-microservices" = {

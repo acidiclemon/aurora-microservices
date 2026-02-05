@@ -12,6 +12,23 @@ data "aws_lb" "selected" {
 }
 
 # ------------------------------------------------------------------------------
+# Log Groups
+# Explicitly manage Log Groups to ensure existence before Metric Filters
+# ------------------------------------------------------------------------------
+
+resource "aws_cloudwatch_log_group" "frontend" {
+  name              = "/aws/ecs/${var.project_name}-${terraform.workspace}-frontend"
+  retention_in_days = 30
+}
+
+resource "aws_cloudwatch_log_group" "microservices" {
+  for_each = local.services
+
+  name              = "/aws/ecs/${var.project_name}-${terraform.workspace}-${each.key}"
+  retention_in_days = 30
+}
+
+# ------------------------------------------------------------------------------
 # Log Metric Filters
 # Extract "ErrorCount" from application logs
 # ------------------------------------------------------------------------------
@@ -19,7 +36,7 @@ data "aws_lb" "selected" {
 resource "aws_cloudwatch_log_metric_filter" "frontend_errors" {
   name           = "FrontendErrors"
   pattern        = "?ERROR ?Exception"
-  log_group_name = "/aws/ecs/${module.frontend.name}"
+  log_group_name = aws_cloudwatch_log_group.frontend.name
 
   metric_transformation {
     name          = "ErrorCount"
@@ -30,14 +47,12 @@ resource "aws_cloudwatch_log_metric_filter" "frontend_errors" {
       Service = "frontend"
     }
   }
-
-  depends_on = [module.frontend]
 }
 
 resource "aws_cloudwatch_log_metric_filter" "checkout_errors" {
   name           = "CheckoutErrors"
   pattern        = "?ERROR ?Exception"
-  log_group_name = "/aws/ecs/${module.microservices["checkoutservice"].name}"
+  log_group_name = aws_cloudwatch_log_group.microservices["checkoutservice"].name
 
   metric_transformation {
     name          = "ErrorCount"
@@ -48,14 +63,12 @@ resource "aws_cloudwatch_log_metric_filter" "checkout_errors" {
       Service = "checkoutservice"
     }
   }
-
-  depends_on = [module.microservices]
 }
 
 resource "aws_cloudwatch_log_metric_filter" "payment_errors" {
   name           = "PaymentErrors"
   pattern        = "?ERROR ?Exception"
-  log_group_name = "/aws/ecs/${module.microservices["paymentservice"].name}"
+  log_group_name = aws_cloudwatch_log_group.microservices["paymentservice"].name
 
   metric_transformation {
     name          = "ErrorCount"
@@ -66,8 +79,6 @@ resource "aws_cloudwatch_log_metric_filter" "payment_errors" {
       Service = "paymentservice"
     }
   }
-
-  depends_on = [module.microservices]
 }
 
 # ------------------------------------------------------------------------------
