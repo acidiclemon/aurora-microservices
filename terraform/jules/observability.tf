@@ -35,20 +35,19 @@ resource "aws_cloudwatch_log_group" "microservices" {
 
 resource "aws_cloudwatch_log_metric_filter" "frontend_errors" {
   name           = "FrontendErrors"
-  pattern        = "?ERROR ?Exception"
+  pattern        = "?ERROR ?error ?Exception ?exception"
   log_group_name = aws_cloudwatch_log_group.frontend.name
 
   metric_transformation {
     name      = "FrontendErrorCount"
     namespace = local.metric_namespace
     value     = "1"
-    # Dimensions removed as they are not supported with simple text patterns
   }
 }
 
 resource "aws_cloudwatch_log_metric_filter" "checkout_errors" {
   name           = "CheckoutErrors"
-  pattern        = "?ERROR ?Exception"
+  pattern        = "?ERROR ?error ?Exception ?exception"
   log_group_name = aws_cloudwatch_log_group.microservices["checkoutservice"].name
 
   metric_transformation {
@@ -60,7 +59,7 @@ resource "aws_cloudwatch_log_metric_filter" "checkout_errors" {
 
 resource "aws_cloudwatch_log_metric_filter" "payment_errors" {
   name           = "PaymentErrors"
-  pattern        = "?ERROR ?Exception"
+  pattern        = "?ERROR ?error ?Exception ?exception"
   log_group_name = aws_cloudwatch_log_group.microservices["paymentservice"].name
 
   metric_transformation {
