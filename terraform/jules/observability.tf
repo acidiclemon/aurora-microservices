@@ -39,12 +39,10 @@ resource "aws_cloudwatch_log_metric_filter" "frontend_errors" {
   log_group_name = aws_cloudwatch_log_group.frontend.name
 
   metric_transformation {
-    name          = "ErrorCount"
-    namespace     = local.metric_namespace
-    value         = "1"
-    dimensions = {
-      Service = "frontend"
-    }
+    name      = "FrontendErrorCount"
+    namespace = local.metric_namespace
+    value     = "1"
+    # Dimensions removed as they are not supported with simple text patterns
   }
 }
 
@@ -54,12 +52,9 @@ resource "aws_cloudwatch_log_metric_filter" "checkout_errors" {
   log_group_name = aws_cloudwatch_log_group.microservices["checkoutservice"].name
 
   metric_transformation {
-    name          = "ErrorCount"
-    namespace     = local.metric_namespace
-    value         = "1"
-    dimensions = {
-      Service = "checkoutservice"
-    }
+    name      = "CheckoutErrorCount"
+    namespace = local.metric_namespace
+    value     = "1"
   }
 }
 
@@ -69,12 +64,9 @@ resource "aws_cloudwatch_log_metric_filter" "payment_errors" {
   log_group_name = aws_cloudwatch_log_group.microservices["paymentservice"].name
 
   metric_transformation {
-    name          = "ErrorCount"
-    namespace     = local.metric_namespace
-    value         = "1"
-    dimensions = {
-      Service = "paymentservice"
-    }
+    name      = "PaymentErrorCount"
+    namespace = local.metric_namespace
+    value     = "1"
   }
 }
 
@@ -165,9 +157,9 @@ resource "aws_cloudwatch_dashboard" "main" {
           region  = var.region
           title   = "Application Errors (Logs)"
           metrics = [
-            [local.metric_namespace, "ErrorCount", "Service", "frontend", { stat = "Sum", period = 60 }],
-            [local.metric_namespace, "ErrorCount", "Service", "checkoutservice", { stat = "Sum", period = 60 }],
-            [local.metric_namespace, "ErrorCount", "Service", "paymentservice", { stat = "Sum", period = 60 }]
+            [local.metric_namespace, "FrontendErrorCount", { stat = "Sum", period = 60, label = "Frontend" }],
+            [local.metric_namespace, "CheckoutErrorCount", { stat = "Sum", period = 60, label = "Checkout" }],
+            [local.metric_namespace, "PaymentErrorCount", { stat = "Sum", period = 60, label = "Payment" }]
           ]
         }
       },
