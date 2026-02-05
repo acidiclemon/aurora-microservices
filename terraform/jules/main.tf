@@ -374,8 +374,17 @@ module "frontend" {
         { name = "ENABLE_TRACING", value = "1" },
         { name = "COLLECTOR_SERVICE_ADDR", value = "collector.${var.project_name}-${terraform.workspace}.private:4317" }
       ]
-      # Using CloudWatch log group created by the module
-      enable_cloudwatch_logging = true
+
+      # Explicitly managed log group in observability.tf
+      enable_cloudwatch_logging = false
+      log_configuration = {
+        logDriver = "awslogs"
+        options = {
+          awslogs-group         = aws_cloudwatch_log_group.frontend.name
+          awslogs-region        = var.region
+          awslogs-stream-prefix = "ecs"
+        }
+      }
     }
   }
 
@@ -386,10 +395,6 @@ module "frontend" {
       container_port   = 8080
     }
   }
-
-  # Explicitly managed log group in observability.tf
-  create_cloudwatch_log_group = false
-  cloudwatch_log_group_name   = aws_cloudwatch_log_group.frontend.name
 
   capacity_provider_strategy = {
     "${var.project_name}-${terraform.workspace}-microservices" = {
@@ -446,17 +451,22 @@ module "microservices" {
         try(each.value.env, [])
       )
 
-      enable_cloudwatch_logging = true
+      # Explicitly managed log group in observability.tf
+      enable_cloudwatch_logging = false
+      log_configuration = {
+        logDriver = "awslogs"
+        options = {
+          awslogs-group         = aws_cloudwatch_log_group.microservices[each.key].name
+          awslogs-region        = var.region
+          awslogs-stream-prefix = "ecs"
+        }
+      }
     }
   }
 
   service_registries = {
     registry_arn = aws_service_discovery_service.this[each.key].arn
   }
-
-  # Explicitly managed log group in observability.tf
-  create_cloudwatch_log_group = false
-  cloudwatch_log_group_name   = aws_cloudwatch_log_group.microservices[each.key].name
 
   capacity_provider_strategy = {
     "${var.project_name}-${terraform.workspace}-microservices" = {
