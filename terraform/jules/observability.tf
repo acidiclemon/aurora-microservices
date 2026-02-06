@@ -182,3 +182,115 @@ resource "aws_cloudwatch_dashboard" "main" {
     ]
   })
 }
+
+# ------------------------------------------------------------------------------
+# Audit Logs S3 Bucket
+# ------------------------------------------------------------------------------
+
+resource "aws_s3_bucket" "audit_logs" {
+  bucket        = "${var.project_name}-${terraform.workspace}-audit-logs"
+  force_destroy = true
+}
+
+resource "aws_s3_bucket_policy" "audit_logs" {
+  bucket = aws_s3_bucket.audit_logs.id
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Sid    = "AWSLogDeliveryWrite"
+        Effect = "Allow"
+        Principal = {
+          Service = "logs.${var.region}.amazonaws.com"
+        }
+        Action = "s3:PutObject"
+        Resource = "${aws_s3_bucket.audit_logs.arn}/*"
+        Condition = {
+          StringEquals = {
+            "s3:x-amz-acl"      = "bucket-owner-full-control"
+            "aws:SourceAccount" = data.aws_caller_identity.current.account_id
+          }
+        }
+      },
+      {
+        Sid    = "AWSLogDeliveryAclCheck"
+        Effect = "Allow"
+        Principal = {
+          Service = "logs.${var.region}.amazonaws.com"
+        }
+        Action = "s3:GetBucketAcl"
+        Resource = aws_s3_bucket.audit_logs.arn
+        Condition = {
+          StringEquals = {
+            "aws:SourceAccount" = data.aws_caller_identity.current.account_id
+          }
+        }
+      }
+    ]
+  })
+}
+
+# ------------------------------------------------------------------------------
+# Log Data Protection Policy
+# ------------------------------------------------------------------------------
+
+locals {
+  data_protection_policy = jsonencode({
+    Name        = "data-protection-policy"
+    Description = "Mask PCI-DSS sensitive data"
+    Version     = "2021-06-01"
+    Statement = [
+      {
+        Sid = "audit-policy"
+        DataIdentifier = [
+          "arn:aws:dataprotection::aws:data-identifier/CreditCardNumber",
+          "arn:aws:dataprotection::aws:data-identifier/UsSocialSecurityNumber",
+          "arn:aws:dataprotection::aws:data-identifier/EmailAddress",
+          "arn:aws:dataprotection::aws:data-identifier/Address",
+          "arn:aws:dataprotection::aws:data-identifier/Name"
+        ]
+        Operation = {
+          Audit = {
+            FindingsDestination = {
+              S3 = {
+                Bucket = aws_s3_bucket.audit_logs.bucket
+              }
+            }
+          }
+        }
+      },
+      {
+        Sid = "de-identify-policy"
+        DataIdentifier = [
+          "arn:aws:dataprotection::aws:data-identifier/CreditCardNumber",
+          "arn:aws:dataprotection::aws:data-identifier/UsSocialSecurityNumber",
+          "arn:aws:dataprotection::aws:data-identifier/EmailAddress",
+          "arn:aws:dataprotection::aws:data-identifier/Address",
+          "arn:aws:dataprotection::aws:data-identifier/Name"
+        ]
+        Operation = {
+          Deidentify = {
+            MaskConfig = {}
+          }
+        }
+      }
+    ]
+  })
+}
+
+resource "aws_cloudwatch_log_data_protection_policy" "frontend" {
+  log_group_name  = aws_cloudwatch_log_group.frontend.name
+  policy_document = local.data_protection_policy
+}
+
+resource "aws_cloudwatch_log_data_protection_policy" "microservices" {
+  for_each = local.services
+
+  log_group_name  = aws_cloudwatch_log_group.microservices[each.key].name
+  policy_document = local.data_protection_policy
+}
+
+resource "aws_cloudwatch_log_data_protection_policy" "collector" {
+  log_group_name  = aws_cloudwatch_log_group.collector.name
+  policy_document = local.data_protection_policy
+}
