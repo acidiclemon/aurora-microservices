@@ -144,6 +144,8 @@ module "collector" {
     }
   ] : []
 
+  autoscaling_min_capacity = var.enable_ha ? 2 : 1
+
   # Run on EC2 instances (same as other microservices)
   capacity_provider_strategy = {
     "${var.project_name}-${terraform.workspace}-microservices" = {

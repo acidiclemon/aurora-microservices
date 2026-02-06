@@ -404,6 +404,8 @@ module "frontend" {
     }
   ] : []
 
+  autoscaling_min_capacity = var.enable_ha ? 2 : 1
+
   capacity_provider_strategy = {
     "${var.project_name}-${terraform.workspace}-microservices" = {
       capacity_provider = "${var.project_name}-${terraform.workspace}-microservices"
@@ -483,6 +485,8 @@ module "microservices" {
       field = "attribute:ecs.availability-zone"
     }
   ] : []
+
+  autoscaling_min_capacity = var.enable_ha ? 2 : 1
 
   capacity_provider_strategy = {
     "${var.project_name}-${terraform.workspace}-microservices" = {
