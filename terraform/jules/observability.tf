@@ -241,25 +241,6 @@ locals {
     Version     = "2021-06-01"
     Statement = [
       {
-        Sid = "audit-policy"
-        DataIdentifier = [
-          "arn:aws:dataprotection::aws:data-identifier/CreditCardNumber",
-          "arn:aws:dataprotection::aws:data-identifier/UsSocialSecurityNumber",
-          "arn:aws:dataprotection::aws:data-identifier/EmailAddress",
-          "arn:aws:dataprotection::aws:data-identifier/Address",
-          "arn:aws:dataprotection::aws:data-identifier/Name"
-        ]
-        Operation = {
-          Audit = {
-            FindingsDestination = {
-              S3 = {
-                Bucket = aws_s3_bucket.audit_logs.bucket
-              }
-            }
-          }
-        }
-      },
-      {
         Sid = "de-identify-policy"
         DataIdentifier = [
           "arn:aws:dataprotection::aws:data-identifier/CreditCardNumber",
@@ -293,4 +274,126 @@ resource "aws_cloudwatch_log_data_protection_policy" "microservices" {
 resource "aws_cloudwatch_log_data_protection_policy" "collector" {
   log_group_name  = aws_cloudwatch_log_group.collector.name
   policy_document = local.data_protection_policy
+}
+
+# ------------------------------------------------------------------------------
+# Firehose Delivery Stream for Logs
+# ------------------------------------------------------------------------------
+
+resource "aws_iam_role" "firehose_role" {
+  name = "${var.project_name}-${terraform.workspace}-firehose-role"
+
+  assume_role_policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Action = "sts:AssumeRole"
+        Effect = "Allow"
+        Principal = {
+          Service = "firehose.amazonaws.com"
+        }
+      }
+    ]
+  })
+}
+
+resource "aws_iam_role_policy" "firehose_policy" {
+  name   = "${var.project_name}-${terraform.workspace}-firehose-policy"
+  role   = aws_iam_role.firehose_role.id
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect = "Allow"
+        Action = [
+          "s3:AbortMultipartUpload",
+          "s3:GetBucketLocation",
+          "s3:GetObject",
+          "s3:ListBucket",
+          "s3:ListBucketMultipartUploads",
+          "s3:PutObject"
+        ]
+        Resource = [
+          aws_s3_bucket.audit_logs.arn,
+          "${aws_s3_bucket.audit_logs.arn}/*"
+        ]
+      }
+    ]
+  })
+}
+
+resource "aws_kinesis_firehose_delivery_stream" "logs_stream" {
+  name        = "${var.project_name}-${terraform.workspace}-logs-stream"
+  destination = "extended_s3"
+
+  extended_s3_configuration {
+    role_arn   = aws_iam_role.firehose_role.arn
+    bucket_arn = aws_s3_bucket.audit_logs.arn
+
+    buffering_size     = 5
+    buffering_interval = 300
+    compression_format = "GZIP"
+  }
+}
+
+# ------------------------------------------------------------------------------
+# CloudWatch Logs Subscription to Firehose
+# ------------------------------------------------------------------------------
+
+resource "aws_iam_role" "logs_subscription_role" {
+  name = "${var.project_name}-${terraform.workspace}-logs-subscription-role"
+
+  assume_role_policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Action = "sts:AssumeRole"
+        Effect = "Allow"
+        Principal = {
+          Service = "logs.${var.region}.amazonaws.com"
+        }
+      }
+    ]
+  })
+}
+
+resource "aws_iam_role_policy" "logs_subscription_policy" {
+  name   = "${var.project_name}-${terraform.workspace}-logs-subscription-policy"
+  role   = aws_iam_role.logs_subscription_role.id
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect = "Allow"
+        Action = "firehose:PutRecord"
+        Resource = aws_kinesis_firehose_delivery_stream.logs_stream.arn
+      }
+    ]
+  })
+}
+
+resource "aws_cloudwatch_log_subscription_filter" "frontend" {
+  name            = "${var.project_name}-${terraform.workspace}-frontend-to-s3"
+  log_group_name  = aws_cloudwatch_log_group.frontend.name
+  filter_pattern  = "" # All logs
+  destination_arn = aws_kinesis_firehose_delivery_stream.logs_stream.arn
+  role_arn        = aws_iam_role.logs_subscription_role.arn
+}
+
+resource "aws_cloudwatch_log_subscription_filter" "microservices" {
+  for_each = local.services
+
+  name            = "${var.project_name}-${terraform.workspace}-${each.key}-to-s3"
+  log_group_name  = aws_cloudwatch_log_group.microservices[each.key].name
+  filter_pattern  = "" # All logs
+  destination_arn = aws_kinesis_firehose_delivery_stream.logs_stream.arn
+  role_arn        = aws_iam_role.logs_subscription_role.arn
+}
+
+resource "aws_cloudwatch_log_subscription_filter" "collector" {
+  name            = "${var.project_name}-${terraform.workspace}-collector-to-s3"
+  log_group_name  = aws_cloudwatch_log_group.collector.name
+  filter_pattern  = "" # All logs
+  destination_arn = aws_kinesis_firehose_delivery_stream.logs_stream.arn
+  role_arn        = aws_iam_role.logs_subscription_role.arn
 }
