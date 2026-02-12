@@ -217,10 +217,10 @@ resource "aws_s3_bucket_policy" "raw_logs" {
         Resource = "${aws_s3_bucket.raw_logs.arn}/*"
         Condition = {
           StringNotLike = {
-            "aws:PrincipalArn" = var.security_team_role_arn != "" ? [
+            "aws:PrincipalArn" = [
               var.security_team_role_arn,           # The Role ARN itself
               "${var.security_team_role_arn}/*"     # Any assumed role session
-            ] : ["arn:aws:iam::${data.aws_caller_identity.current.account_id}:root"]
+            ]
           }
         }
       }
@@ -278,10 +278,10 @@ resource "aws_s3_bucket_policy" "audit_findings" {
         Resource = "${aws_s3_bucket.audit_findings.arn}/*"
         Condition = {
           StringNotLike = {
-            "aws:PrincipalArn" = var.security_team_role_arn != "" ? [
+            "aws:PrincipalArn" = [
               var.security_team_role_arn,           # The Role ARN itself
               "${var.security_team_role_arn}/*"     # Any assumed role session
-            ] : ["arn:aws:iam::${data.aws_caller_identity.current.account_id}:root"]
+            ]
           }
         }
       }
@@ -469,14 +469,6 @@ resource "aws_cloudwatch_log_subscription_filter" "microservices" {
 
   name            = "${var.project_name}-${terraform.workspace}-${each.key}-to-s3"
   log_group_name  = aws_cloudwatch_log_group.microservices[each.key].name
-  filter_pattern  = "" # All logs
-  destination_arn = aws_kinesis_firehose_delivery_stream.logs_stream.arn
-  role_arn        = aws_iam_role.logs_subscription_role.arn
-}
-
-resource "aws_cloudwatch_log_subscription_filter" "collector" {
-  name            = "${var.project_name}-${terraform.workspace}-collector-to-s3"
-  log_group_name  = aws_cloudwatch_log_group.collector.name
   filter_pattern  = "" # All logs
   destination_arn = aws_kinesis_firehose_delivery_stream.logs_stream.arn
   role_arn        = aws_iam_role.logs_subscription_role.arn
