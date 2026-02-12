@@ -92,3 +92,9 @@ variable "enable_ha" {
   type        = bool
   default     = false
 }
+
+variable "security_team_role_arn" {
+  description = "ARN of the IAM Role for the Security Team to access audit logs"
+  type        = string
+  default     = ""
+}

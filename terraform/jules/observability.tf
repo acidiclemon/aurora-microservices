@@ -184,19 +184,62 @@ resource "aws_cloudwatch_dashboard" "main" {
 }
 
 # ------------------------------------------------------------------------------
-# Audit Logs S3 Bucket
+# Audit & Raw Logs S3 Buckets
 # ------------------------------------------------------------------------------
 
-resource "aws_s3_bucket" "audit_logs" {
-  bucket        = "${var.project_name}-${terraform.workspace}-audit-logs"
+# Bucket 1: Raw Logs (from Firehose) - Unmasked
+resource "aws_s3_bucket" "raw_logs" {
+  bucket        = "${var.project_name}-${terraform.workspace}-raw-logs"
   force_destroy = true
 }
 
-resource "aws_s3_bucket_policy" "audit_logs" {
-  bucket = aws_s3_bucket.audit_logs.id
+resource "aws_s3_bucket_policy" "raw_logs" {
+  bucket = aws_s3_bucket.raw_logs.id
   policy = jsonencode({
     Version = "2012-10-17"
     Statement = [
+      # Allow Firehose to write
+      {
+        Sid    = "FirehoseWrite"
+        Effect = "Allow"
+        Principal = {
+          AWS = aws_iam_role.firehose_role.arn
+        }
+        Action = "s3:PutObject"
+        Resource = "${aws_s3_bucket.raw_logs.arn}/*"
+      },
+      # Restrict Access to Security Team
+      {
+        Sid    = "SecurityTeamRead"
+        Effect = "Deny"
+        Principal = "*"
+        Action = "s3:GetObject"
+        Resource = "${aws_s3_bucket.raw_logs.arn}/*"
+        Condition = {
+          StringNotLike = {
+            "aws:PrincipalArn" = var.security_team_role_arn != "" ? [
+              var.security_team_role_arn,           # The Role ARN itself
+              "${var.security_team_role_arn}/*"     # Any assumed role session
+            ] : ["arn:aws:iam::${data.aws_caller_identity.current.account_id}:root"]
+          }
+        }
+      }
+    ]
+  })
+}
+
+# Bucket 2: Audit Findings (from Policy) - Unmasked
+resource "aws_s3_bucket" "audit_findings" {
+  bucket        = "${var.project_name}-${terraform.workspace}-audit-findings"
+  force_destroy = true
+}
+
+resource "aws_s3_bucket_policy" "audit_findings" {
+  bucket = aws_s3_bucket.audit_findings.id
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      # Allow CloudWatch Logs to write
       {
         Sid    = "AWSLogDeliveryWrite"
         Effect = "Allow"
@@ -204,7 +247,7 @@ resource "aws_s3_bucket_policy" "audit_logs" {
           Service = "logs.${var.region}.amazonaws.com"
         }
         Action = "s3:PutObject"
-        Resource = "${aws_s3_bucket.audit_logs.arn}/*"
+        Resource = "${aws_s3_bucket.audit_findings.arn}/*"
         Condition = {
           StringEquals = {
             "s3:x-amz-acl"      = "bucket-owner-full-control"
@@ -219,10 +262,26 @@ resource "aws_s3_bucket_policy" "audit_logs" {
           Service = "logs.${var.region}.amazonaws.com"
         }
         Action = "s3:GetBucketAcl"
-        Resource = aws_s3_bucket.audit_logs.arn
+        Resource = aws_s3_bucket.audit_findings.arn
         Condition = {
           StringEquals = {
             "aws:SourceAccount" = data.aws_caller_identity.current.account_id
+          }
+        }
+      },
+      # Restrict Access to Security Team
+      {
+        Sid    = "SecurityTeamRead"
+        Effect = "Deny"
+        Principal = "*"
+        Action = "s3:GetObject"
+        Resource = "${aws_s3_bucket.audit_findings.arn}/*"
+        Condition = {
+          StringNotLike = {
+            "aws:PrincipalArn" = var.security_team_role_arn != "" ? [
+              var.security_team_role_arn,           # The Role ARN itself
+              "${var.security_team_role_arn}/*"     # Any assumed role session
+            ] : ["arn:aws:iam::${data.aws_caller_identity.current.account_id}:root"]
           }
         }
       }
@@ -240,6 +299,25 @@ locals {
     Description = "Mask PCI-DSS sensitive data"
     Version     = "2021-06-01"
     Statement = [
+      {
+        Sid = "audit-policy"
+        DataIdentifier = [
+          "arn:aws:dataprotection::aws:data-identifier/CreditCardNumber",
+          "arn:aws:dataprotection::aws:data-identifier/UsSocialSecurityNumber",
+          "arn:aws:dataprotection::aws:data-identifier/EmailAddress",
+          "arn:aws:dataprotection::aws:data-identifier/Address",
+          "arn:aws:dataprotection::aws:data-identifier/Name"
+        ]
+        Operation = {
+          Audit = {
+            FindingsDestination = {
+              S3 = {
+                Bucket = aws_s3_bucket.audit_findings.bucket
+              }
+            }
+          }
+        }
+      },
       {
         Sid = "de-identify-policy"
         DataIdentifier = [
@@ -314,8 +392,8 @@ resource "aws_iam_role_policy" "firehose_policy" {
           "s3:PutObject"
         ]
         Resource = [
-          aws_s3_bucket.audit_logs.arn,
-          "${aws_s3_bucket.audit_logs.arn}/*"
+          aws_s3_bucket.raw_logs.arn,
+          "${aws_s3_bucket.raw_logs.arn}/*"
         ]
       }
     ]
@@ -328,7 +406,7 @@ resource "aws_kinesis_firehose_delivery_stream" "logs_stream" {
 
   extended_s3_configuration {
     role_arn   = aws_iam_role.firehose_role.arn
-    bucket_arn = aws_s3_bucket.audit_logs.arn
+    bucket_arn = aws_s3_bucket.raw_logs.arn
 
     buffering_size     = 5
     buffering_interval = 300
@@ -367,6 +445,12 @@ resource "aws_iam_role_policy" "logs_subscription_policy" {
         Effect = "Allow"
         Action = "firehose:PutRecord"
         Resource = aws_kinesis_firehose_delivery_stream.logs_stream.arn
+      },
+      # Allow unmasking logs when sending to destination
+      {
+        Effect = "Allow"
+        Action = "logs:Unmask"
+        Resource = "*"
       }
     ]
   })
