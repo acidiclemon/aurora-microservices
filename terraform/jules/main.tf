@@ -359,17 +359,13 @@ module "frontend" {
     service = {
       discovery_name = "frontend"
       port_name      = "frontend-8080-tcp"
-      # Module expects a single object for client_alias, unwrapped.
-      client_alias = {
-        port     = 8080
-        dns_name = "frontend"
-      }
+      # Removed client_alias to rely on discovery_name default
       tls = {
         issuer_cert_authority = {
           aws_pca_authority_arn = aws_acmpca_certificate_authority.this.arn
         }
         kms_key = aws_kms_key.service_connect_tls.arn
-        role_arn = null # ECS Service Linked Role is used for issuance, Task Role for retrieval
+        role_arn = null
       }
     }
   }
@@ -478,11 +474,7 @@ module "microservices" {
     service = {
       discovery_name = each.key
       port_name      = try(each.value.port, null) != null ? "${each.key}-${each.value.port}-tcp" : null
-      # Module expects a single object for client_alias, unwrapped.
-      client_alias = try(each.value.port, null) != null ? {
-        port     = each.value.port
-        dns_name = each.key
-      } : null
+      # Removed client_alias to rely on discovery_name default
       tls = {
         issuer_cert_authority = {
           aws_pca_authority_arn = aws_acmpca_certificate_authority.this.arn

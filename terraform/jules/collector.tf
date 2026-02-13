@@ -98,11 +98,8 @@ module "collector" {
     service = {
       discovery_name = "collector"
       port_name      = "collector-4317-tcp"
-      # Module expects a single object for client_alias, unwrapped.
-      client_alias = {
-        port     = 4317
-        dns_name = "collector"
-      }
+      # Removed client_alias to rely on discovery_name default and avoid module syntax issues.
+      # This exposes the primary OTLP gRPC port (4317) via collector.[namespace].
       tls = {
         issuer_cert_authority = {
           aws_pca_authority_arn = aws_acmpca_certificate_authority.this.arn
