@@ -27,3 +27,8 @@ output "website_url" {
   description = "The full URL to access the website"
   value       = var.domain_name != "" ? "https://${var.project_name}-${terraform.workspace}.${var.domain_name}" : "http://${module.alb.dns_name}"
 }
+
+output "security_team_role_arn" {
+  description = "The ARN of the IAM role for the Security Team to assume to access logs"
+  value       = aws_iam_role.security_team_role.arn
+}

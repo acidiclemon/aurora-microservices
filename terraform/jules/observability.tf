@@ -184,6 +184,50 @@ resource "aws_cloudwatch_dashboard" "main" {
 }
 
 # ------------------------------------------------------------------------------
+# Security Team IAM Role (for log access)
+# ------------------------------------------------------------------------------
+
+resource "aws_iam_role" "security_team_role" {
+  name = "${var.project_name}-${terraform.workspace}-security-team-role"
+
+  assume_role_policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Action = "sts:AssumeRole"
+        Effect = "Allow"
+        Principal = {
+          AWS = "arn:aws:iam::${data.aws_caller_identity.current.account_id}:root"
+        }
+      }
+    ]
+  })
+}
+
+resource "aws_iam_role_policy" "security_team_policy" {
+  name   = "${var.project_name}-${terraform.workspace}-security-team-policy"
+  role   = aws_iam_role.security_team_role.id
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect = "Allow"
+        Action = [
+          "s3:GetObject",
+          "s3:ListBucket"
+        ]
+        Resource = [
+          aws_s3_bucket.raw_logs.arn,
+          "${aws_s3_bucket.raw_logs.arn}/*",
+          aws_s3_bucket.audit_findings.arn,
+          "${aws_s3_bucket.audit_findings.arn}/*"
+        ]
+      }
+    ]
+  })
+}
+
+# ------------------------------------------------------------------------------
 # Audit & Raw Logs S3 Buckets
 # ------------------------------------------------------------------------------
 
@@ -208,7 +252,7 @@ resource "aws_s3_bucket_policy" "raw_logs" {
         Action = "s3:PutObject"
         Resource = "${aws_s3_bucket.raw_logs.arn}/*"
       },
-      # Restrict Access to Security Team
+      # Restrict Access to Security Team Role
       {
         Sid    = "SecurityTeamRead"
         Effect = "Deny"
@@ -218,8 +262,8 @@ resource "aws_s3_bucket_policy" "raw_logs" {
         Condition = {
           StringNotLike = {
             "aws:PrincipalArn" = [
-              var.security_team_role_arn,           # The Role ARN itself
-              "${var.security_team_role_arn}/*"     # Any assumed role session
+              aws_iam_role.security_team_role.arn,        # The Role ARN itself
+              "${aws_iam_role.security_team_role.arn}/*"  # Any assumed role session
             ]
           }
         }
@@ -269,7 +313,7 @@ resource "aws_s3_bucket_policy" "audit_findings" {
           }
         }
       },
-      # Restrict Access to Security Team
+      # Restrict Access to Security Team Role
       {
         Sid    = "SecurityTeamRead"
         Effect = "Deny"
@@ -279,8 +323,8 @@ resource "aws_s3_bucket_policy" "audit_findings" {
         Condition = {
           StringNotLike = {
             "aws:PrincipalArn" = [
-              var.security_team_role_arn,           # The Role ARN itself
-              "${var.security_team_role_arn}/*"     # Any assumed role session
+              aws_iam_role.security_team_role.arn,        # The Role ARN itself
+              "${aws_iam_role.security_team_role.arn}/*"  # Any assumed role session
             ]
           }
         }
