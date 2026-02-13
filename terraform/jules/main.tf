@@ -18,7 +18,7 @@ locals {
   acm_certificate_arn = var.acm_certificate_id != "" ? "arn:aws:acm:us-east-1:${data.aws_caller_identity.current.account_id}:certificate/${var.acm_certificate_id}" : ""
 
   cluster_name = "${var.project_name}-${terraform.workspace}-cluster"
-  namespace    = "${var.project_name}-${terraform.workspace}.private"
+  namespace    = "${var.project_name}-${terraform.workspace}.sc"
 
   services = {
     adservice = {
@@ -34,12 +34,12 @@ locals {
       port = 5050
       env = [
         { name = "PORT", value = "5050" },
-        { name = "PRODUCT_CATALOG_SERVICE_ADDR", value = "${var.project_name}-${terraform.workspace}-productcatalogservice.${var.project_name}-${terraform.workspace}.private:3550" },
-        { name = "SHIPPING_SERVICE_ADDR", value = "${var.project_name}-${terraform.workspace}-shippingservice.${var.project_name}-${terraform.workspace}.private:50051" },
-        { name = "PAYMENT_SERVICE_ADDR", value = "${var.project_name}-${terraform.workspace}-paymentservice.${var.project_name}-${terraform.workspace}.private:50051" },
-        { name = "EMAIL_SERVICE_ADDR", value = "${var.project_name}-${terraform.workspace}-emailservice.${var.project_name}-${terraform.workspace}.private:8080" },
-        { name = "CURRENCY_SERVICE_ADDR", value = "${var.project_name}-${terraform.workspace}-currencyservice.${var.project_name}-${terraform.workspace}.private:7000" },
-        { name = "CART_SERVICE_ADDR", value = "${var.project_name}-${terraform.workspace}-cartservice.${var.project_name}-${terraform.workspace}.private:7070" }
+        { name = "PRODUCT_CATALOG_SERVICE_ADDR", value = "productcatalogservice:3550" },
+        { name = "SHIPPING_SERVICE_ADDR", value = "shippingservice:50051" },
+        { name = "PAYMENT_SERVICE_ADDR", value = "paymentservice:50051" },
+        { name = "EMAIL_SERVICE_ADDR", value = "emailservice:8080" },
+        { name = "CURRENCY_SERVICE_ADDR", value = "currencyservice:7000" },
+        { name = "CART_SERVICE_ADDR", value = "cartservice:7070" }
       ]
     }
     currencyservice = {
@@ -64,7 +64,7 @@ locals {
       port = 8080
       env = [
         { name = "PORT", value = "8080" },
-        { name = "PRODUCT_CATALOG_SERVICE_ADDR", value = "${var.project_name}-${terraform.workspace}-productcatalogservice.${var.project_name}-${terraform.workspace}.private:3550" }
+        { name = "PRODUCT_CATALOG_SERVICE_ADDR", value = "productcatalogservice:3550" }
       ]
     }
     shippingservice = {
@@ -223,6 +223,11 @@ module "ecs" {
 
   cluster_name = local.cluster_name
 
+  # Service Connect Defaults (Cluster-level)
+  cluster_service_connect_defaults = {
+    namespace = aws_service_discovery_private_dns_namespace.service_connect.arn
+  }
+
   # Capacity Provider
   default_capacity_provider_use_fargate = false
   autoscaling_capacity_providers = {
@@ -300,34 +305,36 @@ module "autoscaling" {
 }
 
 ################################################################################
-# Service Discovery
+# Service Discovery (Service Connect)
 ################################################################################
 
-resource "aws_service_discovery_private_dns_namespace" "this" {
+resource "aws_service_discovery_private_dns_namespace" "service_connect" {
   name        = local.namespace
-  description = "Private DNS namespace for ECS services"
+  description = "Service Connect Namespace (Private DNS)"
   vpc         = module.vpc.vpc_id
 }
 
-resource "aws_service_discovery_service" "this" {
-  for_each = local.services
+################################################################################
+# IAM Policies
+################################################################################
 
-  name = "${var.project_name}-${terraform.workspace}-${each.key}"
-
-  dns_config {
-    namespace_id = aws_service_discovery_private_dns_namespace.this.id
-
-    dns_records {
-      ttl  = 10
-      type = "A"
-    }
-
-    routing_policy = "MULTIVALUE"
-  }
-
-  health_check_custom_config {
-    failure_threshold = 1
-  }
+resource "aws_iam_policy" "service_connect_tls" {
+  name        = "${var.project_name}-${terraform.workspace}-sc-tls-policy"
+  description = "Allow ECS tasks to communicate with ACM PCA for Service Connect TLS"
+  policy      = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect = "Allow"
+        Action = [
+          "acm-pca:DescribeCertificateAuthority",
+          "acm-pca:GetCertificate",
+          "acm-pca:IssueCertificate"
+        ]
+        Resource = aws_acmpca_certificate_authority.this.arn
+      }
+    ]
+  })
 }
 
 ################################################################################
@@ -342,12 +349,39 @@ module "frontend" {
   name        = "${var.project_name}-${terraform.workspace}-frontend"
   cluster_arn = module.ecs.cluster_arn
 
-  create_tasks_iam_role = false
+  # IAM Role for Service Connect TLS
+  create_tasks_iam_role = true
+  tasks_iam_role_policies = {
+    ServiceConnectTLS = aws_iam_policy.service_connect_tls.arn
+  }
+
   create_security_group = false
 
   cpu          = 140
   memory       = 450
   network_mode = "awsvpc"
+
+  # Service Connect Configuration
+  service_connect_configuration = {
+    enabled   = true
+    namespace = aws_service_discovery_private_dns_namespace.service_connect.arn
+    service = {
+      discovery_name = "frontend"
+      client_alias = [
+        {
+          port     = 8080
+          dns_name = "frontend"
+        }
+      ]
+      tls = {
+        issuer_cert_authority = {
+          aws_pca_authority_arn = aws_acmpca_certificate_authority.this.arn
+        }
+        kms_key = aws_kms_key.service_connect_tls.arn
+        role_arn = null # ECS Service Linked Role is used for issuance, Task Role for retrieval
+      }
+    }
+  }
 
   container_definitions = {
     frontend = {
@@ -363,16 +397,16 @@ module "frontend" {
       ]
       environment = [
         { name = "PORT", value = "8080" },
-        { name = "PRODUCT_CATALOG_SERVICE_ADDR", value = "${var.project_name}-${terraform.workspace}-productcatalogservice.${var.project_name}-${terraform.workspace}.private:3550" },
-        { name = "CURRENCY_SERVICE_ADDR", value = "${var.project_name}-${terraform.workspace}-currencyservice.${var.project_name}-${terraform.workspace}.private:7000" },
-        { name = "CART_SERVICE_ADDR", value = "${var.project_name}-${terraform.workspace}-cartservice.${var.project_name}-${terraform.workspace}.private:7070" },
-        { name = "RECOMMENDATION_SERVICE_ADDR", value = "${var.project_name}-${terraform.workspace}-recommendationservice.${var.project_name}-${terraform.workspace}.private:8080" },
-        { name = "SHIPPING_SERVICE_ADDR", value = "${var.project_name}-${terraform.workspace}-shippingservice.${var.project_name}-${terraform.workspace}.private:50051" },
-        { name = "CHECKOUT_SERVICE_ADDR", value = "${var.project_name}-${terraform.workspace}-checkoutservice.${var.project_name}-${terraform.workspace}.private:5050" },
-        { name = "AD_SERVICE_ADDR", value = "${var.project_name}-${terraform.workspace}-adservice.${var.project_name}-${terraform.workspace}.private:9555" },
-        { name = "SHOPPING_ASSISTANT_SERVICE_ADDR", value = "${var.project_name}-${terraform.workspace}-shoppingassistantservice.${var.project_name}-${terraform.workspace}.private:8080" },
+        { name = "PRODUCT_CATALOG_SERVICE_ADDR", value = "productcatalogservice:3550" },
+        { name = "CURRENCY_SERVICE_ADDR", value = "currencyservice:7000" },
+        { name = "CART_SERVICE_ADDR", value = "cartservice:7070" },
+        { name = "RECOMMENDATION_SERVICE_ADDR", value = "recommendationservice:8080" },
+        { name = "SHIPPING_SERVICE_ADDR", value = "shippingservice:50051" },
+        { name = "CHECKOUT_SERVICE_ADDR", value = "checkoutservice:5050" },
+        { name = "AD_SERVICE_ADDR", value = "adservice:9555" },
+        { name = "SHOPPING_ASSISTANT_SERVICE_ADDR", value = "shoppingassistantservice:8080" },
         { name = "ENABLE_TRACING", value = "1" },
-        { name = "COLLECTOR_SERVICE_ADDR", value = "collector.${var.project_name}-${terraform.workspace}.private:4317" }
+        { name = "COLLECTOR_SERVICE_ADDR", value = "collector:4317" }
       ]
 
       # Explicitly managed log group in observability.tf
@@ -434,12 +468,39 @@ module "microservices" {
   name        = "${var.project_name}-${terraform.workspace}-${each.key}"
   cluster_arn = module.ecs.cluster_arn
 
-  create_tasks_iam_role = false
+  # IAM Role for Service Connect TLS
+  create_tasks_iam_role = true
+  tasks_iam_role_policies = {
+    ServiceConnectTLS = aws_iam_policy.service_connect_tls.arn
+  }
+
   create_security_group = false
 
   cpu          = 140
   memory       = 450
   network_mode = "awsvpc"
+
+  # Service Connect Configuration
+  service_connect_configuration = {
+    enabled   = true
+    namespace = aws_service_discovery_private_dns_namespace.service_connect.arn
+    service = {
+      discovery_name = each.key
+      client_alias = try(each.value.port, null) != null ? [
+        {
+          port     = each.value.port
+          dns_name = each.key
+        }
+      ] : []
+      tls = {
+        issuer_cert_authority = {
+          aws_pca_authority_arn = aws_acmpca_certificate_authority.this.arn
+        }
+        kms_key = aws_kms_key.service_connect_tls.arn
+        role_arn = null
+      }
+    }
+  }
 
   container_definitions = {
     (each.key) = {
@@ -474,9 +535,7 @@ module "microservices" {
     }
   }
 
-  service_registries = {
-    registry_arn = aws_service_discovery_service.this[each.key].arn
-  }
+  # No manual service registries (handled by Service Connect)
 
   desired_count = var.enable_ha ? 2 : 1
   ordered_placement_strategy = var.enable_ha ? [

@@ -61,24 +61,10 @@ resource "aws_iam_role_policy_attachment" "collector_xray" {
   policy_arn = "arn:aws:iam::aws:policy/AWSXRayDaemonWriteAccess"
 }
 
-# Service Discovery for Collector
-resource "aws_service_discovery_service" "collector" {
-  name = "collector"
-
-  dns_config {
-    namespace_id = aws_service_discovery_private_dns_namespace.this.id
-
-    dns_records {
-      ttl  = 10
-      type = "A"
-    }
-
-    routing_policy = "MULTIVALUE"
-  }
-
-  health_check_custom_config {
-    failure_threshold = 1
-  }
+# Attach Service Connect TLS Policy (defined in main.tf)
+resource "aws_iam_role_policy_attachment" "collector_sc_tls" {
+  role       = aws_iam_role.collector_task_role.name
+  policy_arn = aws_iam_policy.service_connect_tls.arn
 }
 
 # Log Group for Collector
@@ -104,6 +90,32 @@ module "collector" {
   cpu          = 256
   memory       = 512
   network_mode = "awsvpc"
+
+  # Service Connect Configuration
+  service_connect_configuration = {
+    enabled   = true
+    namespace = aws_service_discovery_private_dns_namespace.service_connect.arn
+    service = {
+      discovery_name = "collector"
+      client_alias = [
+        {
+          port     = 4317
+          dns_name = "collector"
+        },
+        {
+          port     = 4318
+          dns_name = "collector"
+        }
+      ]
+      tls = {
+        issuer_cert_authority = {
+          aws_pca_authority_arn = aws_acmpca_certificate_authority.this.arn
+        }
+        kms_key = aws_kms_key.service_connect_tls.arn
+        role_arn = null
+      }
+    }
+  }
 
   container_definitions = {
     collector = {
@@ -146,9 +158,7 @@ module "collector" {
     }
   }
 
-  service_registries = {
-    registry_arn = aws_service_discovery_service.collector.arn
-  }
+  # No manual service registries (handled by Service Connect)
 
   desired_count = var.enable_ha ? 2 : 1
   ordered_placement_strategy = var.enable_ha ? [
