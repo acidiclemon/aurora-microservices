@@ -222,6 +222,82 @@ resource "aws_iam_role_policy" "security_team_policy" {
           aws_s3_bucket.audit_findings.arn,
           "${aws_s3_bucket.audit_findings.arn}/*"
         ]
+      },
+      {
+        Effect = "Allow"
+        Action = [
+          "kms:Decrypt",
+          "kms:GenerateDataKey"
+        ]
+        Resource = aws_kms_key.logs_key.arn
+      }
+    ]
+  })
+}
+
+# ------------------------------------------------------------------------------
+# KMS Key for Logs
+# ------------------------------------------------------------------------------
+
+resource "aws_kms_key" "logs_key" {
+  description             = "KMS key for ${var.project_name}-${terraform.workspace} logs"
+  deletion_window_in_days = 7
+  enable_key_rotation     = true
+}
+
+resource "aws_kms_alias" "logs_key" {
+  name          = "alias/${var.project_name}-${terraform.workspace}-logs-key"
+  target_key_id = aws_kms_key.logs_key.key_id
+}
+
+resource "aws_kms_key_policy" "logs_key" {
+  key_id = aws_kms_key.logs_key.id
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Sid    = "Enable IAM User Permissions"
+        Effect = "Allow"
+        Principal = {
+          AWS = "arn:aws:iam::${data.aws_caller_identity.current.account_id}:root"
+        }
+        Action   = "kms:*"
+        Resource = "*"
+      },
+      {
+        Sid    = "Allow CloudWatch Logs"
+        Effect = "Allow"
+        Principal = {
+          Service = "logs.${var.region}.amazonaws.com"
+        }
+        Action = [
+          "kms:Encrypt",
+          "kms:Decrypt",
+          "kms:ReEncrypt*",
+          "kms:GenerateDataKey*",
+          "kms:DescribeKey"
+        ]
+        Resource = "*"
+        Condition = {
+          ArnLike = {
+            "kms:EncryptionContext:aws:logs:arn" : "arn:aws:logs:${var.region}:${data.aws_caller_identity.current.account_id}:*"
+          }
+        }
+      },
+      {
+        Sid    = "Allow Kinesis Firehose"
+        Effect = "Allow"
+        Principal = {
+          Service = "firehose.amazonaws.com"
+        }
+        Action = [
+          "kms:Encrypt",
+          "kms:Decrypt",
+          "kms:ReEncrypt*",
+          "kms:GenerateDataKey*",
+          "kms:DescribeKey"
+        ]
+        Resource = "*"
       }
     ]
   })
@@ -235,6 +311,17 @@ resource "aws_iam_role_policy" "security_team_policy" {
 resource "aws_s3_bucket" "raw_logs" {
   bucket        = "${var.project_name}-${terraform.workspace}-raw-logs"
   force_destroy = true
+}
+
+resource "aws_s3_bucket_server_side_encryption_configuration" "raw_logs" {
+  bucket = aws_s3_bucket.raw_logs.id
+
+  rule {
+    apply_server_side_encryption_by_default {
+      kms_master_key_id = aws_kms_key.logs_key.arn
+      sse_algorithm     = "aws:kms"
+    }
+  }
 }
 
 resource "aws_s3_bucket_policy" "raw_logs" {
@@ -276,6 +363,17 @@ resource "aws_s3_bucket_policy" "raw_logs" {
 resource "aws_s3_bucket" "audit_findings" {
   bucket        = "${var.project_name}-${terraform.workspace}-audit-findings"
   force_destroy = true
+}
+
+resource "aws_s3_bucket_server_side_encryption_configuration" "audit_findings" {
+  bucket = aws_s3_bucket.audit_findings.id
+
+  rule {
+    apply_server_side_encryption_by_default {
+      kms_master_key_id = aws_kms_key.logs_key.arn
+      sse_algorithm     = "aws:kms"
+    }
+  }
 }
 
 resource "aws_s3_bucket_policy" "audit_findings" {
@@ -447,6 +545,15 @@ resource "aws_iam_role_policy" "firehose_policy" {
           aws_s3_bucket.raw_logs.arn,
           "${aws_s3_bucket.raw_logs.arn}/*"
         ]
+      },
+      {
+        Effect = "Allow"
+        Action = [
+          "kms:Encrypt",
+          "kms:Decrypt",
+          "kms:GenerateDataKey"
+        ]
+        Resource = aws_kms_key.logs_key.arn
       }
     ]
   })
