@@ -347,6 +347,7 @@ locals {
         Sid = "audit-policy"
         DataIdentifier = [
           "arn:aws:dataprotection::aws:data-identifier/CreditCardNumber",
+          "arn:aws:dataprotection::aws:data-identifier/CreditCardSecurityCode",
           "arn:aws:dataprotection::aws:data-identifier/Ssn-US",
           "arn:aws:dataprotection::aws:data-identifier/EmailAddress",
           "arn:aws:dataprotection::aws:data-identifier/Address",
@@ -366,6 +367,7 @@ locals {
         Sid = "de-identify-policy"
         DataIdentifier = [
           "arn:aws:dataprotection::aws:data-identifier/CreditCardNumber",
+          "arn:aws:dataprotection::aws:data-identifier/CreditCardSecurityCode",
           "arn:aws:dataprotection::aws:data-identifier/Ssn-US",
           "arn:aws:dataprotection::aws:data-identifier/EmailAddress",
           "arn:aws:dataprotection::aws:data-identifier/Address",
