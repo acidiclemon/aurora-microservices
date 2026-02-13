@@ -182,3 +182,453 @@ resource "aws_cloudwatch_dashboard" "main" {
     ]
   })
 }
+
+# ------------------------------------------------------------------------------
+# Security Team IAM Role (for log access)
+# ------------------------------------------------------------------------------
+
+resource "aws_iam_role" "security_team_role" {
+  name = "${var.project_name}-${terraform.workspace}-security-team-role"
+
+  assume_role_policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Action = "sts:AssumeRole"
+        Effect = "Allow"
+        Principal = {
+          AWS = "arn:aws:iam::${data.aws_caller_identity.current.account_id}:root"
+        }
+      }
+    ]
+  })
+}
+
+resource "aws_iam_role_policy" "security_team_policy" {
+  name   = "${var.project_name}-${terraform.workspace}-security-team-policy"
+  role   = aws_iam_role.security_team_role.id
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect = "Allow"
+        Action = [
+          "s3:GetObject",
+          "s3:ListBucket"
+        ]
+        Resource = [
+          aws_s3_bucket.raw_logs.arn,
+          "${aws_s3_bucket.raw_logs.arn}/*",
+          aws_s3_bucket.audit_findings.arn,
+          "${aws_s3_bucket.audit_findings.arn}/*"
+        ]
+      },
+      {
+        Effect = "Allow"
+        Action = [
+          "kms:Decrypt",
+          "kms:GenerateDataKey"
+        ]
+        Resource = aws_kms_key.logs_key.arn
+      }
+    ]
+  })
+}
+
+# ------------------------------------------------------------------------------
+# KMS Key for Logs
+# ------------------------------------------------------------------------------
+
+resource "aws_kms_key" "logs_key" {
+  description             = "KMS key for ${var.project_name}-${terraform.workspace} logs"
+  deletion_window_in_days = 7
+  enable_key_rotation     = true
+}
+
+resource "aws_kms_alias" "logs_key" {
+  name          = "alias/${var.project_name}-${terraform.workspace}-logs-key"
+  target_key_id = aws_kms_key.logs_key.key_id
+}
+
+resource "aws_kms_key_policy" "logs_key" {
+  key_id = aws_kms_key.logs_key.id
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Sid    = "Enable IAM User Permissions"
+        Effect = "Allow"
+        Principal = {
+          AWS = "arn:aws:iam::${data.aws_caller_identity.current.account_id}:root"
+        }
+        Action   = "kms:*"
+        Resource = "*"
+      },
+      {
+        Sid    = "Allow CloudWatch Logs"
+        Effect = "Allow"
+        Principal = {
+          Service = "logs.${var.region}.amazonaws.com"
+        }
+        Action = [
+          "kms:Encrypt",
+          "kms:Decrypt",
+          "kms:ReEncrypt*",
+          "kms:GenerateDataKey*",
+          "kms:DescribeKey"
+        ]
+        Resource = "*"
+        Condition = {
+          ArnLike = {
+            "kms:EncryptionContext:aws:logs:arn" : "arn:aws:logs:${var.region}:${data.aws_caller_identity.current.account_id}:*"
+          }
+        }
+      },
+      {
+        Sid    = "Allow Kinesis Firehose"
+        Effect = "Allow"
+        Principal = {
+          Service = "firehose.amazonaws.com"
+        }
+        Action = [
+          "kms:Encrypt",
+          "kms:Decrypt",
+          "kms:ReEncrypt*",
+          "kms:GenerateDataKey*",
+          "kms:DescribeKey"
+        ]
+        Resource = "*"
+      }
+    ]
+  })
+}
+
+# ------------------------------------------------------------------------------
+# Audit & Raw Logs S3 Buckets
+# ------------------------------------------------------------------------------
+
+# Bucket 1: Raw Logs (from Firehose) - Unmasked
+resource "aws_s3_bucket" "raw_logs" {
+  bucket        = "${var.project_name}-${terraform.workspace}-raw-logs"
+  force_destroy = true
+}
+
+resource "aws_s3_bucket_server_side_encryption_configuration" "raw_logs" {
+  bucket = aws_s3_bucket.raw_logs.id
+
+  rule {
+    apply_server_side_encryption_by_default {
+      kms_master_key_id = aws_kms_key.logs_key.arn
+      sse_algorithm     = "aws:kms"
+    }
+  }
+}
+
+resource "aws_s3_bucket_policy" "raw_logs" {
+  bucket = aws_s3_bucket.raw_logs.id
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      # Allow Firehose to write
+      {
+        Sid    = "FirehoseWrite"
+        Effect = "Allow"
+        Principal = {
+          AWS = aws_iam_role.firehose_role.arn
+        }
+        Action = "s3:PutObject"
+        Resource = "${aws_s3_bucket.raw_logs.arn}/*"
+      },
+      # Restrict Access to Security Team Role
+      {
+        Sid    = "SecurityTeamRead"
+        Effect = "Deny"
+        Principal = "*"
+        Action = "s3:GetObject"
+        Resource = "${aws_s3_bucket.raw_logs.arn}/*"
+        Condition = {
+          StringNotLike = {
+            "aws:PrincipalArn" = [
+              aws_iam_role.security_team_role.arn,        # The Role ARN itself
+              "${aws_iam_role.security_team_role.arn}/*"  # Any assumed role session
+            ]
+          }
+        }
+      }
+    ]
+  })
+}
+
+# Bucket 2: Audit Findings (from Policy) - Unmasked
+resource "aws_s3_bucket" "audit_findings" {
+  bucket        = "${var.project_name}-${terraform.workspace}-audit-findings"
+  force_destroy = true
+}
+
+resource "aws_s3_bucket_server_side_encryption_configuration" "audit_findings" {
+  bucket = aws_s3_bucket.audit_findings.id
+
+  rule {
+    apply_server_side_encryption_by_default {
+      kms_master_key_id = aws_kms_key.logs_key.arn
+      sse_algorithm     = "aws:kms"
+    }
+  }
+}
+
+resource "aws_s3_bucket_policy" "audit_findings" {
+  bucket = aws_s3_bucket.audit_findings.id
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      # Allow CloudWatch Logs to write
+      {
+        Sid    = "AWSLogDeliveryWrite"
+        Effect = "Allow"
+        Principal = {
+          Service = "logs.${var.region}.amazonaws.com"
+        }
+        Action = "s3:PutObject"
+        Resource = "${aws_s3_bucket.audit_findings.arn}/*"
+        Condition = {
+          StringEquals = {
+            "s3:x-amz-acl"      = "bucket-owner-full-control"
+            "aws:SourceAccount" = data.aws_caller_identity.current.account_id
+          }
+        }
+      },
+      {
+        Sid    = "AWSLogDeliveryAclCheck"
+        Effect = "Allow"
+        Principal = {
+          Service = "logs.${var.region}.amazonaws.com"
+        }
+        Action = "s3:GetBucketAcl"
+        Resource = aws_s3_bucket.audit_findings.arn
+        Condition = {
+          StringEquals = {
+            "aws:SourceAccount" = data.aws_caller_identity.current.account_id
+          }
+        }
+      },
+      # Restrict Access to Security Team Role
+      {
+        Sid    = "SecurityTeamRead"
+        Effect = "Deny"
+        Principal = "*"
+        Action = "s3:GetObject"
+        Resource = "${aws_s3_bucket.audit_findings.arn}/*"
+        Condition = {
+          StringNotLike = {
+            "aws:PrincipalArn" = [
+              aws_iam_role.security_team_role.arn,        # The Role ARN itself
+              "${aws_iam_role.security_team_role.arn}/*"  # Any assumed role session
+            ]
+          }
+        }
+      }
+    ]
+  })
+}
+
+# ------------------------------------------------------------------------------
+# Log Data Protection Policy
+# ------------------------------------------------------------------------------
+
+locals {
+  data_protection_policy = jsonencode({
+    Name        = "data-protection-policy"
+    Description = "Mask PCI-DSS sensitive data"
+    Version     = "2021-06-01"
+    Statement = [
+      {
+        Sid = "audit-policy"
+        DataIdentifier = [
+          "arn:aws:dataprotection::aws:data-identifier/CreditCardNumber",
+          "arn:aws:dataprotection::aws:data-identifier/CreditCardSecurityCode",
+          "arn:aws:dataprotection::aws:data-identifier/Ssn-US",
+          "arn:aws:dataprotection::aws:data-identifier/EmailAddress",
+          "arn:aws:dataprotection::aws:data-identifier/Address",
+          "arn:aws:dataprotection::aws:data-identifier/Name"
+        ]
+        Operation = {
+          Audit = {
+            FindingsDestination = {
+              S3 = {
+                Bucket = aws_s3_bucket.audit_findings.bucket
+              }
+            }
+          }
+        }
+      },
+      {
+        Sid = "de-identify-policy"
+        DataIdentifier = [
+          "arn:aws:dataprotection::aws:data-identifier/CreditCardNumber",
+          "arn:aws:dataprotection::aws:data-identifier/CreditCardSecurityCode",
+          "arn:aws:dataprotection::aws:data-identifier/Ssn-US",
+          "arn:aws:dataprotection::aws:data-identifier/EmailAddress",
+          "arn:aws:dataprotection::aws:data-identifier/Address",
+          "arn:aws:dataprotection::aws:data-identifier/Name"
+        ]
+        Operation = {
+          Deidentify = {
+            MaskConfig = {}
+          }
+        }
+      }
+    ]
+  })
+}
+
+resource "aws_cloudwatch_log_data_protection_policy" "frontend" {
+  log_group_name  = aws_cloudwatch_log_group.frontend.name
+  policy_document = local.data_protection_policy
+
+  depends_on = [aws_s3_bucket_policy.audit_findings]
+}
+
+resource "aws_cloudwatch_log_data_protection_policy" "microservices" {
+  for_each = local.services
+
+  log_group_name  = aws_cloudwatch_log_group.microservices[each.key].name
+  policy_document = local.data_protection_policy
+
+  depends_on = [aws_s3_bucket_policy.audit_findings]
+}
+
+resource "aws_cloudwatch_log_data_protection_policy" "collector" {
+  log_group_name  = aws_cloudwatch_log_group.collector.name
+  policy_document = local.data_protection_policy
+
+  depends_on = [aws_s3_bucket_policy.audit_findings]
+}
+
+# ------------------------------------------------------------------------------
+# Firehose Delivery Stream for Logs
+# ------------------------------------------------------------------------------
+
+resource "aws_iam_role" "firehose_role" {
+  name = "${var.project_name}-${terraform.workspace}-firehose-role"
+
+  assume_role_policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Action = "sts:AssumeRole"
+        Effect = "Allow"
+        Principal = {
+          Service = "firehose.amazonaws.com"
+        }
+      }
+    ]
+  })
+}
+
+resource "aws_iam_role_policy" "firehose_policy" {
+  name   = "${var.project_name}-${terraform.workspace}-firehose-policy"
+  role   = aws_iam_role.firehose_role.id
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect = "Allow"
+        Action = [
+          "s3:AbortMultipartUpload",
+          "s3:GetBucketLocation",
+          "s3:GetObject",
+          "s3:ListBucket",
+          "s3:ListBucketMultipartUploads",
+          "s3:PutObject"
+        ]
+        Resource = [
+          aws_s3_bucket.raw_logs.arn,
+          "${aws_s3_bucket.raw_logs.arn}/*"
+        ]
+      },
+      {
+        Effect = "Allow"
+        Action = [
+          "kms:Encrypt",
+          "kms:Decrypt",
+          "kms:GenerateDataKey"
+        ]
+        Resource = aws_kms_key.logs_key.arn
+      }
+    ]
+  })
+}
+
+resource "aws_kinesis_firehose_delivery_stream" "logs_stream" {
+  name        = "${var.project_name}-${terraform.workspace}-logs-stream"
+  destination = "extended_s3"
+
+  extended_s3_configuration {
+    role_arn   = aws_iam_role.firehose_role.arn
+    bucket_arn = aws_s3_bucket.raw_logs.arn
+
+    buffering_size     = 5
+    buffering_interval = 300
+    compression_format = "GZIP"
+  }
+}
+
+# ------------------------------------------------------------------------------
+# CloudWatch Logs Subscription to Firehose
+# ------------------------------------------------------------------------------
+
+resource "aws_iam_role" "logs_subscription_role" {
+  name = "${var.project_name}-${terraform.workspace}-logs-subscription-role"
+
+  assume_role_policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Action = "sts:AssumeRole"
+        Effect = "Allow"
+        Principal = {
+          Service = "logs.${var.region}.amazonaws.com"
+        }
+      }
+    ]
+  })
+}
+
+resource "aws_iam_role_policy" "logs_subscription_policy" {
+  name   = "${var.project_name}-${terraform.workspace}-logs-subscription-policy"
+  role   = aws_iam_role.logs_subscription_role.id
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect = "Allow"
+        Action = "firehose:PutRecord"
+        Resource = aws_kinesis_firehose_delivery_stream.logs_stream.arn
+      },
+      # Allow unmasking logs when sending to destination
+      {
+        Effect = "Allow"
+        Action = "logs:Unmask"
+        Resource = "*"
+      }
+    ]
+  })
+}
+
+resource "aws_cloudwatch_log_subscription_filter" "frontend" {
+  name            = "${var.project_name}-${terraform.workspace}-frontend-to-s3"
+  log_group_name  = aws_cloudwatch_log_group.frontend.name
+  filter_pattern  = "" # All logs
+  destination_arn = aws_kinesis_firehose_delivery_stream.logs_stream.arn
+  role_arn        = aws_iam_role.logs_subscription_role.arn
+}
+
+resource "aws_cloudwatch_log_subscription_filter" "microservices" {
+  for_each = local.services
+
+  name            = "${var.project_name}-${terraform.workspace}-${each.key}-to-s3"
+  log_group_name  = aws_cloudwatch_log_group.microservices[each.key].name
+  filter_pattern  = "" # All logs
+  destination_arn = aws_kinesis_firehose_delivery_stream.logs_stream.arn
+  role_arn        = aws_iam_role.logs_subscription_role.arn
+}

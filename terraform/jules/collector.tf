@@ -81,6 +81,12 @@ resource "aws_service_discovery_service" "collector" {
   }
 }
 
+# Log Group for Collector
+resource "aws_cloudwatch_log_group" "collector" {
+  name              = "/aws/ecs/${var.project_name}-${terraform.workspace}-collector"
+  retention_in_days = 30
+}
+
 # ECS Service for ADOT Collector
 module "collector" {
   source  = "terraform-aws-modules/ecs/aws//modules/service"
@@ -128,7 +134,15 @@ module "collector" {
       ]
 
       # Logging to CloudWatch
-      enable_cloudwatch_logging = true
+      enable_cloudwatch_logging = false
+      log_configuration = {
+        logDriver = "awslogs"
+        options = {
+          awslogs-group         = aws_cloudwatch_log_group.collector.name
+          awslogs-region        = var.region
+          awslogs-stream-prefix = "ecs"
+        }
+      }
     }
   }
 
