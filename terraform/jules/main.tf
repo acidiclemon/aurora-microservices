@@ -368,12 +368,11 @@ module "frontend" {
     service = {
       discovery_name = "frontend"
       port_name      = "frontend-8080-tcp"
-      client_alias = [
-        {
-          port     = 8080
-          dns_name = "frontend"
-        }
-      ]
+      # Module expects a single object for client_alias, unwrapped.
+      client_alias = {
+        port     = 8080
+        dns_name = "frontend"
+      }
       tls = {
         issuer_cert_authority = {
           aws_pca_authority_arn = aws_acmpca_certificate_authority.this.arn
@@ -488,12 +487,11 @@ module "microservices" {
     service = {
       discovery_name = each.key
       port_name      = try(each.value.port, null) != null ? "${each.key}-${each.value.port}-tcp" : null
-      client_alias = try(each.value.port, null) != null ? [
-        {
-          port     = each.value.port
-          dns_name = each.key
-        }
-      ] : []
+      # Module expects a single object for client_alias, unwrapped.
+      client_alias = try(each.value.port, null) != null ? {
+        port     = each.value.port
+        dns_name = each.key
+      } : null
       tls = {
         issuer_cert_authority = {
           aws_pca_authority_arn = aws_acmpca_certificate_authority.this.arn

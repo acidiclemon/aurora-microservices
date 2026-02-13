@@ -97,17 +97,12 @@ module "collector" {
     namespace = aws_service_discovery_private_dns_namespace.service_connect.arn
     service = {
       discovery_name = "collector"
-      port_name      = "collector-4317-tcp" # Added missing attribute
-      client_alias = [
-        {
-          port     = 4317
-          dns_name = "collector"
-        },
-        {
-          port     = 4318
-          dns_name = "collector"
-        }
-      ]
+      port_name      = "collector-4317-tcp"
+      # Module expects a single object for client_alias, unwrapped.
+      client_alias = {
+        port     = 4317
+        dns_name = "collector"
+      }
       tls = {
         issuer_cert_authority = {
           aws_pca_authority_arn = aws_acmpca_certificate_authority.this.arn
