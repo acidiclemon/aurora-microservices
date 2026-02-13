@@ -386,6 +386,8 @@ locals {
 resource "aws_cloudwatch_log_data_protection_policy" "frontend" {
   log_group_name  = aws_cloudwatch_log_group.frontend.name
   policy_document = local.data_protection_policy
+
+  depends_on = [aws_s3_bucket_policy.audit_findings]
 }
 
 resource "aws_cloudwatch_log_data_protection_policy" "microservices" {
@@ -393,11 +395,15 @@ resource "aws_cloudwatch_log_data_protection_policy" "microservices" {
 
   log_group_name  = aws_cloudwatch_log_group.microservices[each.key].name
   policy_document = local.data_protection_policy
+
+  depends_on = [aws_s3_bucket_policy.audit_findings]
 }
 
 resource "aws_cloudwatch_log_data_protection_policy" "collector" {
   log_group_name  = aws_cloudwatch_log_group.collector.name
   policy_document = local.data_protection_policy
+
+  depends_on = [aws_s3_bucket_policy.audit_findings]
 }
 
 # ------------------------------------------------------------------------------
