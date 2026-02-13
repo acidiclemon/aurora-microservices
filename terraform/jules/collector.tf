@@ -97,6 +97,7 @@ module "collector" {
     namespace = aws_service_discovery_private_dns_namespace.service_connect.arn
     service = {
       discovery_name = "collector"
+      port_name      = "collector-4317-tcp" # Added missing attribute
       client_alias = [
         {
           port     = 4317

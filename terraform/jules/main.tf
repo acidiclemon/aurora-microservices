@@ -367,6 +367,7 @@ module "frontend" {
     namespace = aws_service_discovery_private_dns_namespace.service_connect.arn
     service = {
       discovery_name = "frontend"
+      port_name      = "frontend-8080-tcp"
       client_alias = [
         {
           port     = 8080
@@ -486,6 +487,7 @@ module "microservices" {
     namespace = aws_service_discovery_private_dns_namespace.service_connect.arn
     service = {
       discovery_name = each.key
+      port_name      = try(each.value.port, null) != null ? "${each.key}-${each.value.port}-tcp" : null
       client_alias = try(each.value.port, null) != null ? [
         {
           port     = each.value.port
