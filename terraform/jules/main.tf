@@ -34,12 +34,12 @@ locals {
       port = 5050
       env = [
         { name = "PORT", value = "5050" },
-        { name = "PRODUCT_CATALOG_SERVICE_ADDR", value = "productcatalogservice:3550" },
-        { name = "SHIPPING_SERVICE_ADDR", value = "shippingservice:50051" },
-        { name = "PAYMENT_SERVICE_ADDR", value = "paymentservice:50051" },
-        { name = "EMAIL_SERVICE_ADDR", value = "emailservice:8080" },
-        { name = "CURRENCY_SERVICE_ADDR", value = "currencyservice:7000" },
-        { name = "CART_SERVICE_ADDR", value = "cartservice:7070" }
+        { name = "PRODUCT_CATALOG_SERVICE_ADDR", value = "productcatalogservice.${local.namespace}:3550" },
+        { name = "SHIPPING_SERVICE_ADDR", value = "shippingservice.${local.namespace}:50051" },
+        { name = "PAYMENT_SERVICE_ADDR", value = "paymentservice.${local.namespace}:50051" },
+        { name = "EMAIL_SERVICE_ADDR", value = "emailservice.${local.namespace}:8080" },
+        { name = "CURRENCY_SERVICE_ADDR", value = "currencyservice.${local.namespace}:7000" },
+        { name = "CART_SERVICE_ADDR", value = "cartservice.${local.namespace}:7070" }
       ]
     }
     currencyservice = {
@@ -64,21 +64,12 @@ locals {
       port = 8080
       env = [
         { name = "PORT", value = "8080" },
-        { name = "PRODUCT_CATALOG_SERVICE_ADDR", value = "productcatalogservice:3550" }
+        { name = "PRODUCT_CATALOG_SERVICE_ADDR", value = "productcatalogservice.${local.namespace}:3550" }
       ]
     }
     shippingservice = {
       port = 50051
     }
-    # loadgenerator = {
-    #   # No port needed for service definition, but task needs envs
-    #   container_port = 80 # dummy port
-    #   env = [
-    #     { name = "FRONTEND_ADDR", value = module.alb.dns_name },
-    #     { name = "USERS", value = "10" }
-    #   ]
-    # }
-    # Shopping Assistant is skipped/commented out logic handled by not including it here
   }
 }
 
@@ -397,16 +388,16 @@ module "frontend" {
       ]
       environment = [
         { name = "PORT", value = "8080" },
-        { name = "PRODUCT_CATALOG_SERVICE_ADDR", value = "productcatalogservice:3550" },
-        { name = "CURRENCY_SERVICE_ADDR", value = "currencyservice:7000" },
-        { name = "CART_SERVICE_ADDR", value = "cartservice:7070" },
-        { name = "RECOMMENDATION_SERVICE_ADDR", value = "recommendationservice:8080" },
-        { name = "SHIPPING_SERVICE_ADDR", value = "shippingservice:50051" },
-        { name = "CHECKOUT_SERVICE_ADDR", value = "checkoutservice:5050" },
-        { name = "AD_SERVICE_ADDR", value = "adservice:9555" },
-        { name = "SHOPPING_ASSISTANT_SERVICE_ADDR", value = "shoppingassistantservice:8080" },
+        { name = "PRODUCT_CATALOG_SERVICE_ADDR", value = "productcatalogservice.${local.namespace}:3550" },
+        { name = "CURRENCY_SERVICE_ADDR", value = "currencyservice.${local.namespace}:7000" },
+        { name = "CART_SERVICE_ADDR", value = "cartservice.${local.namespace}:7070" },
+        { name = "RECOMMENDATION_SERVICE_ADDR", value = "recommendationservice.${local.namespace}:8080" },
+        { name = "SHIPPING_SERVICE_ADDR", value = "shippingservice.${local.namespace}:50051" },
+        { name = "CHECKOUT_SERVICE_ADDR", value = "checkoutservice.${local.namespace}:5050" },
+        { name = "AD_SERVICE_ADDR", value = "adservice.${local.namespace}:9555" },
+        { name = "SHOPPING_ASSISTANT_SERVICE_ADDR", value = "shoppingassistantservice.${local.namespace}:8080" },
         { name = "ENABLE_TRACING", value = "1" },
-        { name = "COLLECTOR_SERVICE_ADDR", value = "collector:4317" }
+        { name = "COLLECTOR_SERVICE_ADDR", value = "collector.${local.namespace}:4317" }
       ]
 
       # Explicitly managed log group in observability.tf
