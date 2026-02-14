@@ -164,11 +164,13 @@ resource "aws_ecs_service" "collector" {
         port     = 4317
         dns_name = "collector"
       }
-      # Adding secondary alias if needed, but keeping simple for now to match other successful configs logic.
-      # client_alias {
-      #   port     = 4318
-      #   dns_name = "collector"
-      # }
+      # TLS Configuration for End-to-End Encryption
+      tls {
+        issuer_cert_authority {
+          aws_pca_authority_arn = aws_acmpca_certificate_authority.this.arn
+        }
+        kms_key = aws_kms_key.service_connect_tls.arn
+      }
     }
     log_configuration {
       log_driver = "awslogs"
@@ -183,4 +185,6 @@ resource "aws_ecs_service" "collector" {
   lifecycle {
     ignore_changes = [desired_count]
   }
+
+  depends_on = [module.ecs]
 }
