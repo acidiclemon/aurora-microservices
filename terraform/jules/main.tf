@@ -348,11 +348,11 @@ module "frontend" {
 
   # Create ONLY Task Definition, NOT Service
   create_service = false
-  create_cloudwatch_log_group = false
 
   cpu          = 140
   memory       = 450
   network_mode = "awsvpc"
+  requires_compatibilities = ["EC2"]
 
   container_definitions = {
     frontend = {
@@ -436,24 +436,12 @@ resource "aws_ecs_service" "frontend" {
   }
 
   # Service Connect Configuration
+  # Frontend is client-only: outbound traffic (to microservices) goes through
+  # the Envoy sidecar with TLS, but inbound port 8080 remains plain HTTP
+  # so the ALB can health-check and route traffic directly.
   service_connect_configuration {
     enabled   = true
     namespace = aws_service_discovery_private_dns_namespace.service_connect.arn
-    service {
-      discovery_name = "frontend"
-      port_name      = "frontend-8080-tcp"
-      client_alias {
-        port     = 8080
-        dns_name = "frontend"
-      }
-      tls {
-        issuer_cert_authority {
-          aws_pca_authority_arn = aws_acmpca_certificate_authority.this.arn
-        }
-        kms_key = aws_kms_key.service_connect_tls.arn
-        # role_arn defaults to Service Linked Role
-      }
-    }
     log_configuration {
       log_driver = "awslogs"
       options = {
@@ -489,11 +477,11 @@ module "microservices" {
 
   # Create ONLY Task Definition, NOT Service
   create_service = false
-  create_cloudwatch_log_group = false
 
   cpu          = 140
   memory       = 450
   network_mode = "awsvpc"
+  requires_compatibilities = ["EC2"]
 
   container_definitions = {
     (each.key) = {
@@ -585,8 +573,8 @@ resource "aws_ecs_service" "microservices" {
         issuer_cert_authority {
           aws_pca_authority_arn = aws_acmpca_certificate_authority.this.arn
         }
-        kms_key = aws_kms_key.service_connect_tls.arn
-        # role_arn defaults to Service Linked Role
+        kms_key  = aws_kms_key.service_connect_tls.arn
+        role_arn = aws_iam_role.ecs_sc_tls_infra.arn
       }
     }
     log_configuration {
