@@ -458,8 +458,7 @@ resource "aws_ecs_service" "frontend" {
 
   depends_on = [
     module.ecs,
-    aws_ecs_service.microservices,
-    aws_ecs_service.collector
+    terraform_data.backend_readiness_gate
   ]
 }
 
@@ -595,7 +594,7 @@ resource "aws_ecs_service" "microservices" {
     ignore_changes = [desired_count]
   }
 
-  wait_for_steady_state = false
+
 
   depends_on = [module.ecs]
 }
