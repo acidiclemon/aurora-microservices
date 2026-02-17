@@ -595,7 +595,7 @@ resource "aws_ecs_service" "microservices" {
     ignore_changes = [desired_count]
   }
 
-  wait_for_steady_state = true
+  wait_for_steady_state = false
 
   depends_on = [module.ecs]
 }
