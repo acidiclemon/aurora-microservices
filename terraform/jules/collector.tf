@@ -61,6 +61,8 @@ resource "aws_iam_role_policy_attachment" "collector_xray" {
   policy_arn = "arn:aws:iam::aws:policy/AWSXRayDaemonWriteAccess"
 }
 
+# Attach Service Connect TLS Policy (defined in main.tf)
+resource "aws_iam_role_policy_attachment" "collector_sc_tls" {
   role       = aws_iam_role.collector_task_role.name
   policy_arn = aws_iam_policy.service_connect_tls.arn
 }
