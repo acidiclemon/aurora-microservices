@@ -61,10 +61,31 @@ resource "aws_iam_role_policy_attachment" "collector_xray" {
   policy_arn = "arn:aws:iam::aws:policy/AWSXRayDaemonWriteAccess"
 }
 
-# Attach Service Connect TLS Policy (defined in main.tf)
-resource "aws_iam_role_policy_attachment" "collector_sc_tls" {
   role       = aws_iam_role.collector_task_role.name
   policy_arn = aws_iam_policy.service_connect_tls.arn
+}
+
+# Execution Role for Collector (for pulling images, logging)
+resource "aws_iam_role" "collector_exec_role" {
+  name = "${var.project_name}-${terraform.workspace}-collector-exec-role"
+
+  assume_role_policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Action = "sts:AssumeRole"
+        Effect = "Allow"
+        Principal = {
+          Service = "ecs-tasks.amazonaws.com"
+        }
+      }
+    ]
+  })
+}
+
+resource "aws_iam_role_policy_attachment" "collector_exec_policy" {
+  role       = aws_iam_role.collector_exec_role.name
+  policy_arn = "arn:aws:iam::aws:policy/service-role/AmazonECSTaskExecutionRolePolicy"
 }
 
 # Log Group for Collector
@@ -81,10 +102,8 @@ resource "aws_ecs_task_definition" "collector" {
   cpu                      = 256
   memory                   = 512
   task_role_arn            = aws_iam_role.collector_task_role.arn
-  # Using cluster execution role if default, or we can use the same pattern as others.
-  # For simplicity, assuming default/no execution role needed for ECR public, OR we use the one from main.tf if exposed.
-  # Actually, `module.ecs` creates an execution role. We should use it.
-  execution_role_arn = "arn:aws:iam::${data.aws_caller_identity.current.account_id}:role/${var.project_name}-${terraform.workspace}-ecs-role"
+  task_role_arn            = aws_iam_role.collector_task_role.arn
+  execution_role_arn       = aws_iam_role.collector_exec_role.arn
 
   container_definitions = jsonencode([
     {
