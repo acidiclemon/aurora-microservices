@@ -187,5 +187,7 @@ resource "aws_ecs_service" "collector" {
     ignore_changes = [desired_count]
   }
 
+  wait_for_steady_state = true
+
   depends_on = [module.ecs]
 }

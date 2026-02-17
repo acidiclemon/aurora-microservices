@@ -456,7 +456,11 @@ resource "aws_ecs_service" "frontend" {
     ignore_changes = [desired_count]
   }
 
-  depends_on = [module.ecs]
+  depends_on = [
+    module.ecs,
+    aws_ecs_service.microservices,
+    aws_ecs_service.collector
+  ]
 }
 
 # Microservices - Task Definition (using module)
@@ -590,6 +594,8 @@ resource "aws_ecs_service" "microservices" {
   lifecycle {
     ignore_changes = [desired_count]
   }
+
+  wait_for_steady_state = true
 
   depends_on = [module.ecs]
 }
