@@ -731,7 +731,6 @@ resource "null_resource" "ecs_pre_destroy" {
   provisioner "local-exec" {
     when    = destroy
     command = <<EOT
-      set -e
       CLUSTER="${self.triggers.cluster_name}"
       REGION="${self.triggers.region}"
       echo "=== ECS Pre-Destroy Cleanup ==="
