@@ -148,6 +148,7 @@ resource "aws_ecs_service" "collector" {
   name            = "${var.project_name}-${terraform.workspace}-collector"
   cluster         = module.ecs.cluster_arn
   task_definition = aws_ecs_task_definition.collector.arn
+  force_delete    = true
   desired_count   = var.enable_ha ? 2 : 1
 
   # Network Configuration

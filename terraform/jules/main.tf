@@ -401,6 +401,7 @@ module "frontend" {
 resource "aws_ecs_service" "frontend" {
   name            = "${var.project_name}-${terraform.workspace}-frontend"
   cluster         = module.ecs.cluster_arn
+  force_delete    = true
   task_definition = module.frontend.task_definition_arn
 
   desired_count = var.enable_ha ? 2 : 1
@@ -530,6 +531,7 @@ resource "aws_ecs_service" "microservices" {
   name            = "${var.project_name}-${terraform.workspace}-${each.key}"
   cluster         = module.ecs.cluster_arn
   task_definition = module.microservices[each.key].task_definition_arn
+  force_delete    = true
 
   desired_count = var.enable_ha ? 2 : 1
 
@@ -711,59 +713,61 @@ resource "aws_cloudfront_distribution" "this" {
 
 ################################################################################
 # Cleanup Logic
+# COMMENTED OUT: force_delete = true on ECS services handles this natively.
+# Kept for reference in case graceful drain is needed in the future.
 ################################################################################
 
-resource "null_resource" "ecs_asg_terminate" {
-  triggers = {
-    asg_name = module.autoscaling.autoscaling_group_name
-  }
+# resource "null_resource" "ecs_asg_terminate" {
+#   triggers = {
+#     asg_name = module.autoscaling.autoscaling_group_name
+#   }
+#
+#   provisioner "local-exec" {
+#     when    = destroy
+#     command = <<EOT
+#       asg_name=${self.triggers.asg_name}
+#       echo "Terminating instances in ASG $asg_name..."
+#       instance_ids=$(aws autoscaling describe-auto-scaling-groups --auto-scaling-group-names "$asg_name" --query "AutoScalingGroups[0].Instances[].InstanceId" --output text)
+#       if [ -n "$instance_ids" ] && [ "$instance_ids" != "None" ]; then
+#         echo "Terminating instances: $instance_ids"
+#         aws ec2 terminate-instances --instance-ids $instance_ids --no-cli-pager || true
+#       else
+#         echo "No instances found in ASG $asg_name."
+#       fi
+#     EOT
+#   }
+#
+#   depends_on = [
+#     aws_ecs_service.frontend,
+#     aws_ecs_service.microservices
+#   ]
+# }
 
-  provisioner "local-exec" {
-    when    = destroy
-    command = <<EOT
-      asg_name=${self.triggers.asg_name}
-      echo "Terminating instances in ASG $asg_name..."
-      instance_ids=$(aws autoscaling describe-auto-scaling-groups --auto-scaling-group-names "$asg_name" --query "AutoScalingGroups[0].Instances[].InstanceId" --output text)
-      if [ -n "$instance_ids" ] && [ "$instance_ids" != "None" ]; then
-        echo "Terminating instances: $instance_ids"
-        aws ec2 terminate-instances --instance-ids $instance_ids --no-cli-pager || true
-      else
-        echo "No instances found in ASG $asg_name."
-      fi
-    EOT
-  }
-
-  depends_on = [
-    aws_ecs_service.frontend,
-    aws_ecs_service.microservices
-  ]
-}
-
-resource "null_resource" "ecs_service_scale_down" {
-  triggers = {
-    cluster_name = local.cluster_name
-  }
-
-  provisioner "local-exec" {
-    when    = destroy
-    command = <<EOT
-      cluster_name=${self.triggers.cluster_name}
-      echo "Scaling down services in cluster $cluster_name..."
-      services=$(aws ecs list-services --cluster "$cluster_name" --query "serviceArns[]" --output text)
-      if [ -n "$services" ] && [ "$services" != "None" ]; then
-        for service in $services; do
-          echo "Scaling down service $service..."
-          aws ecs update-service --cluster "$cluster_name" --service "$service" --desired-count 0 --no-cli-pager || true
-        done
-        echo "Waiting 60s for services to drain..."
-        sleep 60
-      else
-        echo "No services found in cluster $cluster_name."
-      fi
-    EOT
-  }
-
-  depends_on = [
-    null_resource.ecs_asg_terminate
-  ]
-}
+# resource "null_resource" "ecs_service_scale_down" {
+#   triggers = {
+#     cluster_name = local.cluster_name
+#   }
+#
+#   provisioner "local-exec" {
+#     when    = destroy
+#     command = <<EOT
+#       cluster_name=${self.triggers.cluster_name}
+#       echo "Scaling down services in cluster $cluster_name..."
+#       services=$(aws ecs list-services --cluster "$cluster_name" --query "serviceArns[]" --output text)
+#       if [ -n "$services" ] && [ "$services" != "None" ]; then
+#         for service in $services; do
+#           echo "Scaling down service $service..."
+#           aws ecs update-service --cluster "$cluster_name" --service "$service" --desired-count 0 --no-cli-pager || true
+#         done
+#         echo "Waiting 60s for services to drain..."
+#         sleep 60
+#       else
+#         echo "No services found in cluster $cluster_name."
+#       fi
+#     EOT
+#   }
+#
+#   depends_on = [
+#     null_resource.ecs_asg_terminate
+#   ]
+# }
