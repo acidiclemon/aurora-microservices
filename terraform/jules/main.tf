@@ -712,62 +712,65 @@ resource "aws_cloudfront_distribution" "this" {
 }
 
 ################################################################################
-# Cleanup Logic
-# COMMENTED OUT: force_delete = true on ECS services handles this natively.
-# Kept for reference in case graceful drain is needed in the future.
+# Cleanup Logic — Pre-Destroy
+#
+# Runs BEFORE Terraform deletes ECS services. Does two things:
+#   1. Scales every service to desired_count=0 (stops ECS from respawning tasks)
+#   2. Force-stops ALL running tasks in the cluster
+#
+# This ensures DeleteService finds 0 running tasks, making it near-instant.
+# Combined with force_delete=true on the service resources for belt-and-suspenders.
 ################################################################################
 
-# resource "null_resource" "ecs_asg_terminate" {
-#   triggers = {
-#     asg_name = module.autoscaling.autoscaling_group_name
-#   }
-#
-#   provisioner "local-exec" {
-#     when    = destroy
-#     command = <<EOT
-#       asg_name=${self.triggers.asg_name}
-#       echo "Terminating instances in ASG $asg_name..."
-#       instance_ids=$(aws autoscaling describe-auto-scaling-groups --auto-scaling-group-names "$asg_name" --query "AutoScalingGroups[0].Instances[].InstanceId" --output text)
-#       if [ -n "$instance_ids" ] && [ "$instance_ids" != "None" ]; then
-#         echo "Terminating instances: $instance_ids"
-#         aws ec2 terminate-instances --instance-ids $instance_ids --no-cli-pager || true
-#       else
-#         echo "No instances found in ASG $asg_name."
-#       fi
-#     EOT
-#   }
-#
-#   depends_on = [
-#     aws_ecs_service.frontend,
-#     aws_ecs_service.microservices
-#   ]
-# }
+resource "null_resource" "ecs_pre_destroy" {
+  triggers = {
+    cluster_name = local.cluster_name
+    region       = var.region
+  }
 
-# resource "null_resource" "ecs_service_scale_down" {
-#   triggers = {
-#     cluster_name = local.cluster_name
-#   }
-#
-#   provisioner "local-exec" {
-#     when    = destroy
-#     command = <<EOT
-#       cluster_name=${self.triggers.cluster_name}
-#       echo "Scaling down services in cluster $cluster_name..."
-#       services=$(aws ecs list-services --cluster "$cluster_name" --query "serviceArns[]" --output text)
-#       if [ -n "$services" ] && [ "$services" != "None" ]; then
-#         for service in $services; do
-#           echo "Scaling down service $service..."
-#           aws ecs update-service --cluster "$cluster_name" --service "$service" --desired-count 0 --no-cli-pager || true
-#         done
-#         echo "Waiting 60s for services to drain..."
-#         sleep 60
-#       else
-#         echo "No services found in cluster $cluster_name."
-#       fi
-#     EOT
-#   }
-#
-#   depends_on = [
-#     null_resource.ecs_asg_terminate
-#   ]
-# }
+  provisioner "local-exec" {
+    when    = destroy
+    command = <<EOT
+      set -e
+      CLUSTER="${self.triggers.cluster_name}"
+      REGION="${self.triggers.region}"
+      echo "=== ECS Pre-Destroy Cleanup ==="
+      echo "Cluster: $CLUSTER | Region: $REGION"
+
+      # Step 1: Scale ALL services to desired_count=0
+      echo "[1/3] Scaling all services to 0..."
+      SERVICES=$(aws ecs list-services --cluster "$CLUSTER" --region "$REGION" --query "serviceArns[]" --output text 2>/dev/null || true)
+      if [ -n "$SERVICES" ] && [ "$SERVICES" != "None" ]; then
+        for svc in $SERVICES; do
+          echo "  → $svc → desired_count=0"
+          aws ecs update-service --cluster "$CLUSTER" --service "$svc" --desired-count 0 --region "$REGION" --no-cli-pager > /dev/null 2>&1 || true
+        done
+      else
+        echo "  No services found."
+      fi
+
+      # Step 2: Force-stop ALL running tasks
+      echo "[2/3] Force-stopping all tasks..."
+      TASKS=$(aws ecs list-tasks --cluster "$CLUSTER" --region "$REGION" --query "taskArns[]" --output text 2>/dev/null || true)
+      if [ -n "$TASKS" ] && [ "$TASKS" != "None" ]; then
+        for task in $TASKS; do
+          echo "  → Stopping $task"
+          aws ecs stop-task --cluster "$CLUSTER" --task "$task" --reason "Pre-destroy cleanup" --region "$REGION" --no-cli-pager > /dev/null 2>&1 || true
+        done
+      else
+        echo "  No tasks running."
+      fi
+
+      # Step 3: Brief wait for ECS to process the stops
+      echo "[3/3] Waiting 15s for task stops to propagate..."
+      sleep 15
+      echo "=== Pre-destroy cleanup complete ==="
+    EOT
+  }
+
+  depends_on = [
+    aws_ecs_service.frontend,
+    aws_ecs_service.microservices,
+    aws_ecs_service.collector
+  ]
+}
