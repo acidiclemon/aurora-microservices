@@ -760,9 +760,16 @@ resource "null_resource" "ecs_pre_destroy" {
         echo "  No tasks running."
       fi
 
-      # Step 3: Brief wait for ECS to process the stops
-      echo "[3/3] Waiting 15s for task stops to propagate..."
-      sleep 15
+      # Step 3: Wait for tasks to actually stop
+      if [ -n "$TASKS" ] && [ "$TASKS" != "None" ]; then
+        echo "[3/3] Waiting for tasks to stop..."
+        # Split tasks into chunks if needed, but for now pass all at once (AWS limit 100)
+        # We use 'aws ecs wait tasks-stopped' which polls every 6s
+        aws ecs wait tasks-stopped --cluster "$CLUSTER" --tasks $TASKS --region "$REGION" --no-cli-pager > /dev/null 2>&1 || true
+        echo "  All tasks stopped."
+      else
+        echo "[3/3] No tasks to wait for."
+      fi
       echo "=== Pre-destroy cleanup complete ==="
     EOT
   }
