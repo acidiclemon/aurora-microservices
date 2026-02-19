@@ -781,12 +781,77 @@ resource "null_resource" "ecs_pre_destroy" {
     aws_ecs_service.microservices,
     aws_ecs_service.collector,
 
-    # Core Infrastructure
-    # Ensure cleanup happens BEFORE any of these are destroyed
+    # Network & Compute
     module.vpc,
     module.alb,
+    module.alb_sg,
+    module.ecs_sg,
+    module.redis_sg,
+    module.ecs,
+    module.autoscaling,
+    module.redis,
     aws_service_discovery_private_dns_namespace.service_connect,
-    # aws_cloudwatch_log_group.frontend,     # Implicit dependency via service
-    # aws_cloudwatch_log_group.microservices # Implicit dependency via service
+    aws_route53_record.this,
+    aws_cloudfront_distribution.this,
+
+    # Task Definitions
+    module.frontend,
+    module.microservices,
+    aws_ecs_task_definition.collector,
+
+    # IAM & Security (Main)
+    aws_iam_policy.service_connect_tls,
+    
+    # Collector Resources
+    aws_iam_role.collector_task_role,
+    aws_iam_role.collector_exec_role,
+    aws_cloudwatch_log_group.collector,
+
+    # PKI & Certs
+    aws_acmpca_certificate_authority.this,
+    aws_acmpca_certificate.root,
+    aws_acmpca_certificate_authority_certificate.root,
+    aws_iam_role.ecs_sc_tls_infra,
+    aws_kms_key.service_connect_tls,
+    aws_kms_alias.service_connect_tls,
+
+    # Observability - Logs & Metrics
+    aws_cloudwatch_log_group.frontend,
+    aws_cloudwatch_log_group.microservices,
+    aws_cloudwatch_log_metric_filter.frontend_errors,
+    aws_cloudwatch_log_metric_filter.checkout_errors,
+    aws_cloudwatch_log_metric_filter.payment_errors,
+    aws_cloudwatch_dashboard.main,
+    
+    # Observability - IAM & KMS
+    aws_iam_role.security_team_role,
+    aws_iam_role_policy.security_team_policy,
+    aws_kms_key.logs_key,
+    aws_kms_alias.logs_key,
+    aws_kms_key_policy.logs_key,
+
+    # Observability - S3 & Firehose
+    aws_s3_bucket.raw_logs,
+    aws_s3_bucket_policy.raw_logs,
+    aws_s3_bucket.audit_findings,
+    aws_s3_bucket_policy.audit_findings,
+    aws_cloudwatch_log_data_protection_policy.frontend,
+    aws_cloudwatch_log_data_protection_policy.microservices,
+    aws_cloudwatch_log_data_protection_policy.collector,
+    aws_iam_role.firehose_role,
+    aws_iam_role_policy.firehose_policy,
+    aws_kinesis_firehose_delivery_stream.logs_stream,
+    aws_iam_role.logs_subscription_role,
+    aws_iam_role_policy.logs_subscription_policy,
+    aws_cloudwatch_log_subscription_filter.frontend,
+    aws_cloudwatch_log_subscription_filter.microservices,
+
+    # Canaries
+    aws_s3_bucket.canary_artifacts,
+    aws_iam_role.canary_role,
+    aws_iam_role_policy.canary_policy,
+    aws_synthetics_canary.home,
+    aws_synthetics_canary.product,
+    aws_synthetics_canary.cart
   ]
 }
