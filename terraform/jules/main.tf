@@ -776,8 +776,17 @@ resource "null_resource" "ecs_pre_destroy" {
   }
 
   depends_on = [
+    # Services (already here)
     aws_ecs_service.frontend,
     aws_ecs_service.microservices,
-    aws_ecs_service.collector
+    aws_ecs_service.collector,
+
+    # Core Infrastructure
+    # Ensure cleanup happens BEFORE any of these are destroyed
+    module.vpc,
+    module.alb,
+    aws_service_discovery_private_dns_namespace.service_connect,
+    # aws_cloudwatch_log_group.frontend,     # Implicit dependency via service
+    # aws_cloudwatch_log_group.microservices # Implicit dependency via service
   ]
 }
