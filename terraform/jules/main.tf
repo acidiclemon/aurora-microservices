@@ -749,22 +749,23 @@ resource "null_resource" "ecs_pre_destroy" {
       fi
 
       # Step 2: Force-stop ALL running tasks
-      echo "[2/3] Force-stopping all tasks..."
+      # COMMENTED OUT by user request
+      # echo "[2/3] Force-stopping all tasks..."
       TASKS=$(aws ecs list-tasks --cluster "$CLUSTER" --region "$REGION" --query "taskArns[]" --output text 2>/dev/null || true)
-      if [ -n "$TASKS" ] && [ "$TASKS" != "None" ]; then
-        for task in $TASKS; do
-          echo "  → Stopping $task"
-          aws ecs stop-task --cluster "$CLUSTER" --task "$task" --reason "Pre-destroy cleanup" --region "$REGION" --no-cli-pager > /dev/null 2>&1 || true
-        done
-      else
-        echo "  No tasks running."
-      fi
+      # if [ -n "$TASKS" ] && [ "$TASKS" != "None" ]; then
+      #   for task in $TASKS; do
+      #     echo "  → Stopping $task"
+      #     aws ecs stop-task --cluster "$CLUSTER" --task "$task" --reason "Pre-destroy cleanup" --region "$REGION" --no-cli-pager > /dev/null 2>&1 || true
+      #   done
+      # else
+      #   echo "  No tasks running."
+      # fi
 
-      # Step 3: Wait for tasks to actually stop
+      # Step 3: Wait for tasks to actually stop (graceful drain from Step 1)
       if [ -n "$TASKS" ] && [ "$TASKS" != "None" ]; then
-        echo "[3/3] Waiting for tasks to stop..."
-        # Split tasks into chunks if needed, but for now pass all at once (AWS limit 100)
+        echo "[3/3] Waiting for tasks to stop (graceful drain)..."
         # We use 'aws ecs wait tasks-stopped' which polls every 6s
+        # Note: If tasks take >10m to drain, this wait might timeout, but it blocks destroy until then.
         aws ecs wait tasks-stopped --cluster "$CLUSTER" --tasks $TASKS --region "$REGION" --no-cli-pager > /dev/null 2>&1 || true
         echo "  All tasks stopped."
       else
