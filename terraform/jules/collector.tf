@@ -208,5 +208,9 @@ resource "aws_ecs_service" "collector" {
     ignore_changes = [desired_count]
   }
 
-  depends_on = [module.ecs]
+  timeouts {
+    delete = "5m"
+  }
+
+  depends_on = [module.ecs, module.vpc]
 }
