@@ -199,6 +199,7 @@ module "alb" {
       health_check = {
         path = "/_healthz"
       }
+      deregistration_delay = 30
       create_attachment = false
     }
   }
