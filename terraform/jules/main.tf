@@ -744,7 +744,7 @@ resource "null_resource" "ecs_pre_destroy" {
       echo "Cluster: $CLUSTER | Region: $REGION"
 
       # Step 1: Scale ALL services to desired_count=0
-      echo "[1/3] Scaling all services to 0..."
+      echo "[1/5] Scaling all services to 0..."
       SERVICES=$(aws ecs list-services --cluster "$CLUSTER" --region "$REGION" --query "serviceArns[]" --output text 2>/dev/null || true)
       if [ -n "$SERVICES" ] && [ "$SERVICES" != "None" ]; then
         for svc in $SERVICES; do
@@ -756,7 +756,7 @@ resource "null_resource" "ecs_pre_destroy" {
       fi
 
       # Step 2: Force-stop ALL running tasks
-      echo "[2/3] Force-stopping all tasks..."
+      echo "[2/5] Force-stopping all tasks..."
       TASKS=$(aws ecs list-tasks --cluster "$CLUSTER" --region "$REGION" --query "taskArns[]" --output text 2>/dev/null || true)
       if [ -n "$TASKS" ] && [ "$TASKS" != "None" ]; then
         for task in $TASKS; do
@@ -767,15 +767,36 @@ resource "null_resource" "ecs_pre_destroy" {
         echo "  No tasks running."
       fi
 
-      # Step 3: Wait for tasks to actually stop (graceful drain from Step 1)
+      # Step 3: Wait for tasks to actually stop
       if [ -n "$TASKS" ] && [ "$TASKS" != "None" ]; then
-        echo "[3/3] Waiting for tasks to stop (graceful drain)..."
-        # We use 'aws ecs wait tasks-stopped' which polls every 6s
-        # Note: If tasks take >10m to drain, this wait might timeout, but it blocks destroy until then.
+        echo "[3/5] Waiting for tasks to stop..."
         aws ecs wait tasks-stopped --cluster "$CLUSTER" --tasks $TASKS --region "$REGION" --no-cli-pager > /dev/null 2>&1 || true
         echo "  All tasks stopped."
       else
-        echo "[3/3] No tasks to wait for."
+        echo "[3/5] No tasks to wait for."
+      fi
+
+      # Step 4: DELETE all services (--force skips drain wait)
+      # This moves services to DRAINING → INACTIVE lifecycle NOW,
+      # so Terraform's DeleteService finds them already gone.
+      if [ -n "$SERVICES" ] && [ "$SERVICES" != "None" ]; then
+        echo "[4/5] Deleting all services..."
+        for svc in $SERVICES; do
+          echo "  → Deleting $svc"
+          aws ecs delete-service --cluster "$CLUSTER" --service "$svc" --force --region "$REGION" --no-cli-pager > /dev/null 2>&1 || true
+        done
+      else
+        echo "[4/5] No services to delete."
+      fi
+
+      # Step 5: Wait for services to reach INACTIVE
+      # Polls every 15s, up to 40 attempts (~10 minutes)
+      if [ -n "$SERVICES" ] && [ "$SERVICES" != "None" ]; then
+        echo "[5/5] Waiting for services to reach INACTIVE..."
+        aws ecs wait services-inactive --cluster "$CLUSTER" --services $SERVICES --region "$REGION" --no-cli-pager 2>/dev/null || true
+        echo "  All services inactive."
+      else
+        echo "[5/5] No services to wait for."
       fi
       echo "=== Pre-destroy cleanup complete ==="
     EOT
