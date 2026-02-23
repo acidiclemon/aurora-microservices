@@ -731,9 +731,13 @@ resource "aws_cloudfront_distribution" "this" {
 ################################################################################
 
 resource "null_resource" "ecs_pre_destroy" {
+  # timestamp() forces recreation on every apply, ensuring this resource is
+  # always present in state before a destroy. Without this, a failed destroy
+  # removes it from state and subsequent destroys skip the cleanup entirely.
   triggers = {
     cluster_name = local.cluster_name
     region       = var.region
+    run_id       = timestamp()
   }
 
   provisioner "local-exec" {
@@ -777,9 +781,7 @@ resource "null_resource" "ecs_pre_destroy" {
         echo "[3/5] No tasks to wait for."
       fi
 
-      # Step 4: DELETE all services (--force skips drain wait)
-      # This moves services to DRAINING → INACTIVE lifecycle NOW,
-      # so Terraform's DeleteService finds them already gone.
+      # Step 4: DELETE all services (--force bypasses their own drain wait)
       if [ -n "$SERVICES" ] && [ "$SERVICES" != "None" ]; then
         echo "[4/5] Deleting all services..."
         for svc in $SERVICES; do
@@ -790,12 +792,28 @@ resource "null_resource" "ecs_pre_destroy" {
         echo "[4/5] No services to delete."
       fi
 
-      # Step 5: Wait for services to reach INACTIVE
-      # Polls every 15s, up to 40 attempts (~10 minutes)
+      # Step 5: Poll until ALL services reach INACTIVE (up to 25 minutes).
+      # aws ecs wait services-inactive only polls for 10 min (40 × 15s) then exits.
+      # Service Connect + TLS deregistration takes 10-20 min, so we use a custom
+      # loop that keeps polling until all services are gone or we time out.
       if [ -n "$SERVICES" ] && [ "$SERVICES" != "None" ]; then
-        echo "[5/5] Waiting for services to reach INACTIVE..."
-        aws ecs wait services-inactive --cluster "$CLUSTER" --services $SERVICES --region "$REGION" --no-cli-pager 2>/dev/null || true
-        echo "  All services inactive."
+        echo "[5/5] Waiting for all services to reach INACTIVE (up to 25m)..."
+        DEADLINE=$(( $(date +%s) + 1500 ))  # 25 minutes from now
+        while [ $(date +%s) -lt $DEADLINE ]; do
+          STILL_ACTIVE=""
+          for svc in $SERVICES; do
+            STATUS=$(aws ecs describe-services --cluster "$CLUSTER" --services "$svc" --region "$REGION" --query "services[0].status" --output text 2>/dev/null || echo "MISSING")
+            if [ "$STATUS" != "INACTIVE" ] && [ "$STATUS" != "None" ] && [ "$STATUS" != "MISSING" ]; then
+              STILL_ACTIVE="$STILL_ACTIVE $svc($STATUS)"
+            fi
+          done
+          if [ -z "$STILL_ACTIVE" ]; then
+            echo "  All services are INACTIVE."
+            break
+          fi
+          echo "  Still waiting:$STILL_ACTIVE"
+          sleep 15
+        done
       else
         echo "[5/5] No services to wait for."
       fi
