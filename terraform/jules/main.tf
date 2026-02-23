@@ -458,7 +458,7 @@ resource "aws_ecs_service" "frontend" {
   }
 
   timeouts {
-    delete = "5m"
+    delete = "15m"
   }
 
   depends_on = [
@@ -602,7 +602,7 @@ resource "aws_ecs_service" "microservices" {
   }
 
   timeouts {
-    delete = "5m"
+    delete = "15m"
   }
 
   depends_on = [module.ecs, module.vpc]

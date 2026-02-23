@@ -209,7 +209,7 @@ resource "aws_ecs_service" "collector" {
   }
 
   timeouts {
-    delete = "5m"
+    delete = "15m"
   }
 
   depends_on = [module.ecs, module.vpc]
