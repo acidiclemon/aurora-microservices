@@ -782,7 +782,7 @@ resource "null_resource" "ecs_pre_destroy" {
       # loop that keeps polling until all services are gone or we time out.
       if [ -n "$SERVICES" ] && [ "$SERVICES" != "None" ]; then
         echo "[4/4] Waiting for all services to reach INACTIVE (up to 20m)..."
-        DEADLINE=$(( $(date +%s) + 1200 ))  # 20 minutes from now
+        DEADLINE=$(( $(date +%s) + 660 ))  # 11 minutes from now
         while [ $(date +%s) -lt $DEADLINE ]; do
           STILL_ACTIVE=""
           for svc in $SERVICES; do
