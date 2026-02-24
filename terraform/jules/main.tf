@@ -835,6 +835,9 @@ resource "null_resource" "ecs_pre_destroy" {
     # Collector Resources
     aws_iam_role.collector_task_role,
     aws_iam_role.collector_exec_role,
+    aws_iam_role_policy_attachment.collector_xray,
+    aws_iam_role_policy_attachment.collector_exec_policy,
+    aws_iam_role_policy_attachment.collector_sc_tls,
     aws_cloudwatch_log_group.collector,
 
     # PKI & Certs
@@ -842,6 +845,7 @@ resource "null_resource" "ecs_pre_destroy" {
     aws_acmpca_certificate.root,
     aws_acmpca_certificate_authority_certificate.root,
     aws_iam_role.ecs_sc_tls_infra,
+    aws_iam_role_policy_attachment.ecs_sc_tls_infra,
     aws_kms_key.service_connect_tls,
     aws_kms_alias.service_connect_tls,
 
@@ -862,8 +866,10 @@ resource "null_resource" "ecs_pre_destroy" {
 
     # Observability - S3 & Firehose
     aws_s3_bucket.raw_logs,
+    aws_s3_bucket_server_side_encryption_configuration.raw_logs,
     aws_s3_bucket_policy.raw_logs,
     aws_s3_bucket.audit_findings,
+    aws_s3_bucket_server_side_encryption_configuration.audit_findings,
     aws_s3_bucket_policy.audit_findings,
     aws_cloudwatch_log_data_protection_policy.frontend,
     aws_cloudwatch_log_data_protection_policy.microservices,
@@ -878,6 +884,7 @@ resource "null_resource" "ecs_pre_destroy" {
 
     # Canaries
     aws_s3_bucket.canary_artifacts,
+    aws_s3_bucket_lifecycle_configuration.canary_artifacts,
     aws_iam_role.canary_role,
     aws_iam_role_policy.canary_policy,
     aws_synthetics_canary.home,
