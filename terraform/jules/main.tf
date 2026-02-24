@@ -731,13 +731,9 @@ resource "aws_cloudfront_distribution" "this" {
 ################################################################################
 
 resource "null_resource" "ecs_pre_destroy" {
-  # timestamp() forces recreation on every apply, ensuring this resource is
-  # always present in state before a destroy. Without this, a failed destroy
-  # removes it from state and subsequent destroys skip the cleanup entirely.
   triggers = {
     cluster_name = local.cluster_name
     region       = var.region
-    run_id       = timestamp()
   }
 
   provisioner "local-exec" {
@@ -748,57 +744,45 @@ resource "null_resource" "ecs_pre_destroy" {
       echo "=== ECS Pre-Destroy Cleanup ==="
       echo "Cluster: $CLUSTER | Region: $REGION"
 
-      # Step 1: Scale ALL services to desired_count=0
-      echo "[1/5] Scaling all services to 0..."
+      # Step 1: Scale ALL services to desired_count=0 with force new deployment
+      echo "[1/4] Scaling all services to 0..."
       SERVICES=$(aws ecs list-services --cluster "$CLUSTER" --region "$REGION" --query "serviceArns[]" --output text 2>/dev/null || true)
       if [ -n "$SERVICES" ] && [ "$SERVICES" != "None" ]; then
         for svc in $SERVICES; do
           echo "  → $svc → desired_count=0"
-          aws ecs update-service --cluster "$CLUSTER" --service "$svc" --desired-count 0 --region "$REGION" --no-cli-pager > /dev/null 2>&1 || true
+          aws ecs update-service --cluster "$CLUSTER" --service "$svc" --desired-count 0 --force-new-deployment --region "$REGION" --no-cli-pager > /dev/null 2>&1 || true
         done
       else
         echo "  No services found."
       fi
 
-      # Step 2: Force-stop ALL running tasks
-      echo "[2/5] Force-stopping all tasks..."
+      # Step 2: Wait for tasks to actually stop
       TASKS=$(aws ecs list-tasks --cluster "$CLUSTER" --region "$REGION" --query "taskArns[]" --output text 2>/dev/null || true)
       if [ -n "$TASKS" ] && [ "$TASKS" != "None" ]; then
-        for task in $TASKS; do
-          echo "  → Stopping $task"
-          aws ecs stop-task --cluster "$CLUSTER" --task "$task" --reason "Pre-destroy cleanup" --region "$REGION" --no-cli-pager > /dev/null 2>&1 || true
-        done
-      else
-        echo "  No tasks running."
-      fi
-
-      # Step 3: Wait for tasks to actually stop
-      if [ -n "$TASKS" ] && [ "$TASKS" != "None" ]; then
-        echo "[3/5] Waiting for tasks to stop..."
+        echo "[2/4] Waiting for tasks to stop..."
         aws ecs wait tasks-stopped --cluster "$CLUSTER" --tasks $TASKS --region "$REGION" --no-cli-pager > /dev/null 2>&1 || true
         echo "  All tasks stopped."
       else
-        echo "[3/5] No tasks to wait for."
+        echo "[2/4] No tasks to wait for."
       fi
 
-      # Step 4: DELETE all services (--force bypasses their own drain wait)
+      # Step 3: DELETE all services (--force bypasses their own drain wait)
       if [ -n "$SERVICES" ] && [ "$SERVICES" != "None" ]; then
-        echo "[4/5] Deleting all services..."
+        echo "[3/4] Deleting all services..."
         for svc in $SERVICES; do
           echo "  → Deleting $svc"
           aws ecs delete-service --cluster "$CLUSTER" --service "$svc" --force --region "$REGION" --no-cli-pager > /dev/null 2>&1 || true
         done
       else
-        echo "[4/5] No services to delete."
+        echo "[3/4] No services to delete."
       fi
 
-      # Step 5: Poll until ALL services reach INACTIVE (up to 25 minutes).
-      # aws ecs wait services-inactive only polls for 10 min (40 × 15s) then exits.
+      # Step 4: Poll until ALL services reach INACTIVE (up to 20 minutes).
       # Service Connect + TLS deregistration takes 10-20 min, so we use a custom
       # loop that keeps polling until all services are gone or we time out.
       if [ -n "$SERVICES" ] && [ "$SERVICES" != "None" ]; then
-        echo "[5/5] Waiting for all services to reach INACTIVE (up to 25m)..."
-        DEADLINE=$(( $(date +%s) + 1500 ))  # 25 minutes from now
+        echo "[4/4] Waiting for all services to reach INACTIVE (up to 20m)..."
+        DEADLINE=$(( $(date +%s) + 1200 ))  # 20 minutes from now
         while [ $(date +%s) -lt $DEADLINE ]; do
           STILL_ACTIVE=""
           for svc in $SERVICES; do
@@ -815,7 +799,7 @@ resource "null_resource" "ecs_pre_destroy" {
           sleep 15
         done
       else
-        echo "[5/5] No services to wait for."
+        echo "[4/4] No services to wait for."
       fi
       echo "=== Pre-destroy cleanup complete ==="
     EOT
