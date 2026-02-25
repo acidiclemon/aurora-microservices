@@ -182,9 +182,8 @@ module "alb" {
 
   listeners = {
     http = {
-      port       = 80
-      protocol   = "HTTP"
-      ssl_policy = "ELBSecurityPolicy-TLS13-1-2-2021-06"
+      port     = 80
+      protocol = "HTTP"
       forward = {
         target_group_key = "frontend"
       }
