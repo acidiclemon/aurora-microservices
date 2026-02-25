@@ -400,6 +400,7 @@ module "frontend" {
     nginx-tls = {
       image     = "nginx:alpine"
       essential = true
+      readonly_root_filesystem = false
       port_mappings = [
         {
           name          = "nginx-tls-8443-tcp"
