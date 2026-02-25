@@ -193,11 +193,13 @@ module "alb" {
   target_groups = {
     frontend = {
       name_prefix = "front"
-      protocol    = "HTTP"
-      port        = 8080
+      protocol    = "HTTPS"
+      port        = 8443
       target_type = "ip"
       health_check = {
-        path = "/_healthz"
+        path     = "/_healthz"
+        protocol = "HTTPS"
+        port     = 8443
       }
       deregistration_delay = 30
       create_attachment = false
@@ -350,8 +352,8 @@ module "frontend" {
   # Create ONLY Task Definition, NOT Service
   create_service = false
 
-  cpu          = 140
-  memory       = 450
+  cpu          = 180
+  memory       = 530
   network_mode = "awsvpc"
   requires_compatibilities = ["EC2"]
 
@@ -392,6 +394,102 @@ module "frontend" {
         }
       }
     }
+
+    # Nginx TLS sidecar — terminates HTTPS from ALB, proxies to frontend on localhost:8080
+    # Generates a PCA-signed certificate at startup using the task IAM role
+    nginx-tls = {
+      image     = "nginx:alpine"
+      essential = true
+      port_mappings = [
+        {
+          name          = "nginx-tls-8443-tcp"
+          containerPort = 8443
+          hostPort      = 8443
+          protocol      = "tcp"
+        }
+      ]
+
+      environment = [
+        { name = "PCA_ARN", value = aws_acmpca_certificate_authority.this.arn },
+        { name = "AWS_DEFAULT_REGION", value = var.region }
+      ]
+
+      # Install AWS CLI, generate PCA-signed cert, configure Nginx, start
+      entrypoint = ["/bin/sh", "-c"]
+      command = [<<-EOT
+        set -e
+
+        # Install dependencies
+        apk add --no-cache aws-cli openssl
+
+        # Generate private key and CSR
+        openssl genrsa -out /etc/nginx/tls.key 2048
+        openssl req -new -key /etc/nginx/tls.key -out /tmp/tls.csr \
+          -subj "/CN=frontend-internal"
+
+        # Issue certificate via PCA
+        CERT_ARN=$(aws acm-pca issue-certificate \
+          --certificate-authority-arn "$PCA_ARN" \
+          --csr fileb:///tmp/tls.csr \
+          --signing-algorithm SHA256WITHRSA \
+          --validity Value=7,Type=DAYS \
+          --query CertificateArn --output text)
+
+        # Wait for certificate to be issued
+        aws acm-pca wait certificate-issued \
+          --certificate-authority-arn "$PCA_ARN" \
+          --certificate-arn "$CERT_ARN"
+
+        # Retrieve the signed certificate
+        aws acm-pca get-certificate \
+          --certificate-authority-arn "$PCA_ARN" \
+          --certificate-arn "$CERT_ARN" \
+          --query Certificate --output text > /etc/nginx/tls.crt
+
+        # Write Nginx config
+        cat > /etc/nginx/conf.d/default.conf <<'NGINX'
+        server {
+            listen 8443 ssl;
+            ssl_certificate     /etc/nginx/tls.crt;
+            ssl_certificate_key /etc/nginx/tls.key;
+            ssl_protocols       TLSv1.2 TLSv1.3;
+            ssl_ciphers         HIGH:!aNULL:!MD5;
+
+            location / {
+                proxy_pass http://127.0.0.1:8080;
+                proxy_set_header Host $host;
+                proxy_set_header X-Real-IP $remote_addr;
+                proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+                proxy_set_header X-Forwarded-Proto https;
+            }
+
+            location /_healthz {
+                proxy_pass http://127.0.0.1:8080/_healthz;
+            }
+        }
+NGINX
+
+        exec nginx -g 'daemon off;'
+      EOT
+      ]
+
+      dependencies = [
+        {
+          containerName = "frontend"
+          condition     = "START"
+        }
+      ]
+
+      enable_cloudwatch_logging = false
+      log_configuration = {
+        logDriver = "awslogs"
+        options = {
+          awslogs-group         = aws_cloudwatch_log_group.frontend.name
+          awslogs-region        = var.region
+          awslogs-stream-prefix = "nginx-tls"
+        }
+      }
+    }
   }
 
   subnet_ids         = module.vpc.private_subnets
@@ -417,8 +515,8 @@ resource "aws_ecs_service" "frontend" {
   # Load Balancer
   load_balancer {
     target_group_arn = module.alb.target_groups["frontend"].arn
-    container_name   = "frontend"
-    container_port   = 8080
+    container_name   = "nginx-tls"
+    container_port   = 8443
   }
 
   # Capacity Provider Strategy
