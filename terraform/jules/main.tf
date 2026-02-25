@@ -192,10 +192,10 @@ module "alb" {
 
   target_groups = {
     frontend = {
-      name_prefix      = "front"
-      backend_protocol = "HTTPS"
-      backend_port     = 8080
-      target_type      = "ip"
+      name_prefix = "front"
+      protocol    = "HTTPS"
+      port        = 8080
+      target_type = "ip"
       health_check = {
         path     = "/_healthz"
         protocol = "HTTPS"
