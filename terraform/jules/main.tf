@@ -193,12 +193,11 @@ module "alb" {
   target_groups = {
     frontend = {
       name_prefix = "front"
-      protocol    = "HTTPS"
+      protocol    = "HTTP"
       port        = 8080
       target_type = "ip"
       health_check = {
-        path     = "/_healthz"
-        protocol = "HTTPS"
+        path = "/_healthz"
       }
       deregistration_delay = 30
       create_attachment = false
