@@ -182,8 +182,9 @@ module "alb" {
 
   listeners = {
     http = {
-      port     = 80
-      protocol = "HTTP"
+      port       = 80
+      protocol   = "HTTP"
+      ssl_policy = "ELBSecurityPolicy-TLS13-1-2-2021-06"
       forward = {
         target_group_key = "frontend"
       }
@@ -193,11 +194,12 @@ module "alb" {
   target_groups = {
     frontend = {
       name_prefix      = "front"
-      backend_protocol = "HTTP"
+      backend_protocol = "HTTPS"
       backend_port     = 8080
       target_type      = "ip"
       health_check = {
-        path = "/_healthz"
+        path     = "/_healthz"
+        protocol = "HTTPS"
       }
       deregistration_delay = 30
       create_attachment = false
