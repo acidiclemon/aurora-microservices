@@ -400,7 +400,6 @@ module "frontend" {
     nginx-tls = {
       image     = "nginx:alpine"
       essential = true
-      readonly_root_filesystem = false
       port_mappings = [
         {
           name          = "nginx-tls-8443-tcp"
@@ -408,6 +407,15 @@ module "frontend" {
           hostPort      = 8443
           protocol      = "tcp"
         }
+      ]
+
+      # Writable mounts for read-only root filesystem
+      mount_points = [
+        { sourceVolume = "nginx-tmp",     containerPath = "/tmp" },
+        { sourceVolume = "nginx-confdir", containerPath = "/etc/nginx/conf.d" },
+        { sourceVolume = "nginx-cache",   containerPath = "/var/cache/nginx" },
+        { sourceVolume = "nginx-run",     containerPath = "/run" },
+        { sourceVolume = "nginx-logs",    containerPath = "/var/log/nginx" }
       ]
 
       environment = [
@@ -423,9 +431,9 @@ module "frontend" {
         # Install dependencies
         apk add --no-cache aws-cli openssl
 
-        # Generate private key and CSR
-        openssl genrsa -out /etc/nginx/tls.key 2048
-        openssl req -new -key /etc/nginx/tls.key -out /tmp/tls.csr \
+        # Generate private key and CSR in /tmp (writable)
+        openssl genrsa -out /tmp/tls.key 2048
+        openssl req -new -key /tmp/tls.key -out /tmp/tls.csr \
           -subj "/CN=frontend-internal"
 
         # Issue certificate via PCA
@@ -445,14 +453,14 @@ module "frontend" {
         aws acm-pca get-certificate \
           --certificate-authority-arn "$PCA_ARN" \
           --certificate-arn "$CERT_ARN" \
-          --query Certificate --output text > /etc/nginx/tls.crt
+          --query Certificate --output text > /tmp/tls.crt
 
-        # Write Nginx config
+        # Write Nginx config to writable conf.d mount
         cat > /etc/nginx/conf.d/default.conf <<'NGINX'
         server {
             listen 8443 ssl;
-            ssl_certificate     /etc/nginx/tls.crt;
-            ssl_certificate_key /etc/nginx/tls.key;
+            ssl_certificate     /tmp/tls.crt;
+            ssl_certificate_key /tmp/tls.key;
             ssl_protocols       TLSv1.2 TLSv1.3;
             ssl_ciphers         HIGH:!aNULL:!MD5;
 
@@ -491,6 +499,15 @@ NGINX
         }
       }
     }
+  }
+
+  # Ephemeral volumes for nginx-tls read-only root filesystem
+  volume = {
+    nginx-tmp     = {}
+    nginx-confdir = {}
+    nginx-cache   = {}
+    nginx-run     = {}
+    nginx-logs    = {}
   }
 
   subnet_ids         = module.vpc.private_subnets
