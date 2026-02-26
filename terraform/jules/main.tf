@@ -193,13 +193,11 @@ module "alb" {
   target_groups = {
     frontend = {
       name_prefix = "front"
-      protocol    = "HTTPS"
+      protocol    = "HTTP"
       port        = 8080
       target_type = "ip"
       health_check = {
-        path     = "/_healthz"
-        protocol = "HTTPS"
-        port     = 8080
+        path = "/_healthz"
       }
       deregistration_delay = 30
       create_attachment = false
@@ -440,26 +438,12 @@ resource "aws_ecs_service" "frontend" {
   }
 
   # Service Connect Configuration
-  # Frontend exposes an inbound TLS service so the ALB can connect via HTTPS.
-  # Envoy sidecar terminates TLS on port 8080 using the PCA-issued certificate.
+  # Frontend is client-only: outbound traffic (to microservices) goes through
+  # the Envoy sidecar with TLS, but inbound port 8080 remains plain HTTP
+  # so the ALB can health-check and route traffic directly.
   service_connect_configuration {
     enabled   = true
     namespace = aws_service_discovery_private_dns_namespace.service_connect.arn
-    service {
-      discovery_name = "frontend"
-      port_name      = "frontend-8080-tcp"
-      client_alias {
-        port     = 8080
-        dns_name = "frontend"
-      }
-      tls {
-        issuer_cert_authority {
-          aws_pca_authority_arn = aws_acmpca_certificate_authority.this.arn
-        }
-        kms_key  = aws_kms_key.service_connect_tls.arn
-        role_arn = aws_iam_role.ecs_sc_tls_infra.arn
-      }
-    }
     log_configuration {
       log_driver = "awslogs"
       options = {
