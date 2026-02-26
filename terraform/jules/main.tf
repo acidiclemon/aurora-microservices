@@ -194,12 +194,12 @@ module "alb" {
     frontend = {
       name_prefix = "front"
       protocol    = "HTTPS"
-      port        = 8443
+      port        = 8080
       target_type = "ip"
       health_check = {
         path     = "/_healthz"
         protocol = "HTTPS"
-        port     = 8443
+        port     = 8080
       }
       deregistration_delay = 30
       create_attachment = false
@@ -352,8 +352,8 @@ module "frontend" {
   # Create ONLY Task Definition, NOT Service
   create_service = false
 
-  cpu          = 180
-  memory       = 530
+  cpu          = 140
+  memory       = 450
   network_mode = "awsvpc"
   requires_compatibilities = ["EC2"]
 
@@ -394,120 +394,6 @@ module "frontend" {
         }
       }
     }
-
-    # Nginx TLS sidecar — terminates HTTPS from ALB, proxies to frontend on localhost:8080
-    # Generates a PCA-signed certificate at startup using the task IAM role
-    nginx-tls = {
-      image     = "nginx:alpine"
-      essential = true
-      port_mappings = [
-        {
-          name          = "nginx-tls-8443-tcp"
-          containerPort = 8443
-          hostPort      = 8443
-          protocol      = "tcp"
-        }
-      ]
-
-      # Writable mounts for read-only root filesystem
-      mount_points = [
-        { sourceVolume = "nginx-tmp",     containerPath = "/tmp" },
-        { sourceVolume = "nginx-confdir", containerPath = "/etc/nginx/conf.d" },
-        { sourceVolume = "nginx-cache",   containerPath = "/var/cache/nginx" },
-        { sourceVolume = "nginx-run",     containerPath = "/run" },
-        { sourceVolume = "nginx-logs",    containerPath = "/var/log/nginx" }
-      ]
-
-      environment = [
-        { name = "PCA_ARN", value = aws_acmpca_certificate_authority.this.arn },
-        { name = "AWS_DEFAULT_REGION", value = var.region }
-      ]
-
-      # Install AWS CLI, generate PCA-signed cert, configure Nginx, start
-      entrypoint = ["/bin/sh", "-c"]
-      command = [<<-EOT
-        set -e
-
-        # Install dependencies
-        apk add --no-cache aws-cli openssl
-
-        # Generate private key and CSR in /tmp (writable)
-        openssl genrsa -out /tmp/tls.key 2048
-        openssl req -new -key /tmp/tls.key -out /tmp/tls.csr \
-          -subj "/CN=frontend-internal"
-
-        # Issue certificate via PCA
-        CERT_ARN=$(aws acm-pca issue-certificate \
-          --certificate-authority-arn "$PCA_ARN" \
-          --csr fileb:///tmp/tls.csr \
-          --signing-algorithm SHA256WITHRSA \
-          --validity Value=7,Type=DAYS \
-          --query CertificateArn --output text)
-
-        # Wait for certificate to be issued
-        aws acm-pca wait certificate-issued \
-          --certificate-authority-arn "$PCA_ARN" \
-          --certificate-arn "$CERT_ARN"
-
-        # Retrieve the signed certificate
-        aws acm-pca get-certificate \
-          --certificate-authority-arn "$PCA_ARN" \
-          --certificate-arn "$CERT_ARN" \
-          --query Certificate --output text > /tmp/tls.crt
-
-        # Write Nginx config to writable conf.d mount
-        cat > /etc/nginx/conf.d/default.conf <<'NGINX'
-        server {
-            listen 8443 ssl;
-            ssl_certificate     /tmp/tls.crt;
-            ssl_certificate_key /tmp/tls.key;
-            ssl_protocols       TLSv1.2 TLSv1.3;
-            ssl_ciphers         HIGH:!aNULL:!MD5;
-
-            location / {
-                proxy_pass http://127.0.0.1:8080;
-                proxy_set_header Host $host;
-                proxy_set_header X-Real-IP $remote_addr;
-                proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-                proxy_set_header X-Forwarded-Proto https;
-            }
-
-            location /_healthz {
-                proxy_pass http://127.0.0.1:8080/_healthz;
-            }
-        }
-NGINX
-
-        exec nginx -g 'daemon off;'
-      EOT
-      ]
-
-      dependencies = [
-        {
-          containerName = "frontend"
-          condition     = "START"
-        }
-      ]
-
-      enable_cloudwatch_logging = false
-      log_configuration = {
-        logDriver = "awslogs"
-        options = {
-          awslogs-group         = aws_cloudwatch_log_group.frontend.name
-          awslogs-region        = var.region
-          awslogs-stream-prefix = "nginx-tls"
-        }
-      }
-    }
-  }
-
-  # Ephemeral volumes for nginx-tls read-only root filesystem
-  volume = {
-    nginx-tmp     = {}
-    nginx-confdir = {}
-    nginx-cache   = {}
-    nginx-run     = {}
-    nginx-logs    = {}
   }
 
   subnet_ids         = module.vpc.private_subnets
@@ -533,8 +419,8 @@ resource "aws_ecs_service" "frontend" {
   # Load Balancer
   load_balancer {
     target_group_arn = module.alb.target_groups["frontend"].arn
-    container_name   = "nginx-tls"
-    container_port   = 8443
+    container_name   = "frontend"
+    container_port   = 8080
   }
 
   # Capacity Provider Strategy
@@ -554,12 +440,26 @@ resource "aws_ecs_service" "frontend" {
   }
 
   # Service Connect Configuration
-  # Frontend is client-only: outbound traffic (to microservices) goes through
-  # the Envoy sidecar with TLS, but inbound port 8080 remains plain HTTP
-  # so the ALB can health-check and route traffic directly.
+  # Frontend exposes an inbound TLS service so the ALB can connect via HTTPS.
+  # Envoy sidecar terminates TLS on port 8080 using the PCA-issued certificate.
   service_connect_configuration {
     enabled   = true
     namespace = aws_service_discovery_private_dns_namespace.service_connect.arn
+    service {
+      discovery_name = "frontend"
+      port_name      = "frontend-8080-tcp"
+      client_alias {
+        port     = 8080
+        dns_name = "frontend"
+      }
+      tls {
+        issuer_cert_authority {
+          aws_pca_authority_arn = aws_acmpca_certificate_authority.this.arn
+        }
+        kms_key  = aws_kms_key.service_connect_tls.arn
+        role_arn = aws_iam_role.ecs_sc_tls_infra.arn
+      }
+    }
     log_configuration {
       log_driver = "awslogs"
       options = {
