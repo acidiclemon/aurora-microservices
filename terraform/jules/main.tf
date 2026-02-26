@@ -114,7 +114,7 @@ module "alb_sg" {
   vpc_id      = module.vpc.vpc_id
 
   ingress_prefix_list_ids = [data.aws_ec2_managed_prefix_list.cloudfront.id]
-  ingress_rules           = ["http-80-tcp"]
+  ingress_rules           = ["http-80-tcp", "https-443-tcp"]
   egress_rules            = ["all-all"]
 }
 
@@ -167,6 +167,43 @@ module "redis_sg" {
 # ALB
 ################################################################################
 
+# Regional ACM certificate for ALB (must be in the same region as the ALB)
+resource "aws_acm_certificate" "alb" {
+  count = var.domain_name != "" ? 1 : 0
+
+  domain_name       = "${var.project_name}-${terraform.workspace}.${var.domain_name}"
+  validation_method = "DNS"
+
+  lifecycle {
+    create_before_destroy = true
+  }
+}
+
+resource "aws_route53_record" "alb_cert_validation" {
+  for_each = {
+    for dvo in try(aws_acm_certificate.alb[0].domain_validation_options, []) : dvo.domain_name => {
+      name   = dvo.resource_record_name
+      record = dvo.resource_record_value
+      type   = dvo.resource_record_type
+    } if var.domain_name != "" && var.hosted_zone_id != ""
+  }
+
+  zone_id = data.aws_route53_zone.this[0].zone_id
+  name    = each.value.name
+  type    = each.value.type
+  records = [each.value.record]
+  ttl     = 60
+
+  allow_overwrite = true
+}
+
+resource "aws_acm_certificate_validation" "alb" {
+  count = var.domain_name != "" && var.hosted_zone_id != "" ? 1 : 0
+
+  certificate_arn         = aws_acm_certificate.alb[0].arn
+  validation_record_fqdns = [for record in aws_route53_record.alb_cert_validation : record.fqdn]
+}
+
 module "alb" {
   source  = "terraform-aws-modules/alb/aws"
   version = "~> 9.0"
@@ -180,24 +217,39 @@ module "alb" {
   enable_deletion_protection = false
   create_security_group = false
 
-  listeners = {
-    http = {
-      port     = 80
-      protocol = "HTTP"
-      forward = {
-        target_group_key = "frontend"
+  listeners = merge(
+    {
+      http = {
+        port     = 80
+        protocol = "HTTP"
+        forward = {
+          target_group_key = "frontend"
+        }
       }
-    }
-  }
+    },
+    var.domain_name != "" ? {
+      https = {
+        port            = 443
+        protocol        = "HTTPS"
+        ssl_policy      = "ELBSecurityPolicy-TLS13-1-2-2021-06"
+        certificate_arn = aws_acm_certificate_validation.alb[0].certificate_arn
+        forward = {
+          target_group_key = "frontend"
+        }
+      }
+    } : {}
+  )
 
   target_groups = {
     frontend = {
       name_prefix = "front"
-      protocol    = "HTTP"
+      protocol    = "HTTPS"
       port        = 8080
       target_type = "ip"
       health_check = {
-        path = "/_healthz"
+        path     = "/_healthz"
+        protocol = "HTTPS"
+        port     = 8080
       }
       deregistration_delay = 30
       create_attachment = false
@@ -438,12 +490,26 @@ resource "aws_ecs_service" "frontend" {
   }
 
   # Service Connect Configuration
-  # Frontend is client-only: outbound traffic (to microservices) goes through
-  # the Envoy sidecar with TLS, but inbound port 8080 remains plain HTTP
-  # so the ALB can health-check and route traffic directly.
+  # Frontend exposes an inbound TLS service so the ALB can connect via HTTPS.
+  # Envoy sidecar terminates TLS on port 8080 using the PCA-issued certificate.
   service_connect_configuration {
     enabled   = true
     namespace = aws_service_discovery_private_dns_namespace.service_connect.arn
+    service {
+      discovery_name = "frontend"
+      port_name      = "frontend-8080-tcp"
+      client_alias {
+        port     = 8080
+        dns_name = "frontend"
+      }
+      tls {
+        issuer_cert_authority {
+          aws_pca_authority_arn = aws_acmpca_certificate_authority.this.arn
+        }
+        kms_key  = aws_kms_key.service_connect_tls.arn
+        role_arn = aws_iam_role.ecs_sc_tls_infra.arn
+      }
+    }
     log_configuration {
       log_driver = "awslogs"
       options = {
@@ -687,7 +753,7 @@ resource "aws_cloudfront_distribution" "this" {
     custom_origin_config {
       http_port              = 80
       https_port             = 443
-      origin_protocol_policy = "http-only"
+      origin_protocol_policy = var.domain_name != "" ? "https-only" : "http-only"
       origin_ssl_protocols   = ["TLSv1.2"]
     }
   }
