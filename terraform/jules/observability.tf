@@ -439,7 +439,7 @@ resource "aws_s3_bucket_policy" "audit_findings" {
 resource "time_sleep" "wait_for_bucket_policy" {
   depends_on = [aws_s3_bucket_policy.audit_findings]
 
-  create_duration = "30s"
+  create_duration = "60s"
 }
 
 locals {
