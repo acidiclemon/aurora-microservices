@@ -171,7 +171,7 @@ module "redis_sg" {
 resource "aws_acm_certificate" "alb" {
   count = var.domain_name != "" ? 1 : 0
 
-  domain_name       = "${var.project_name}-${terraform.workspace}.${var.domain_name}"
+  domain_name       = "alb-${var.project_name}-${terraform.workspace}.${var.domain_name}"
   validation_method = "DNS"
 
   lifecycle {
@@ -728,6 +728,21 @@ resource "aws_route53_record" "this" {
   }
 }
 
+# ALB-specific DNS record — used as CloudFront origin so the ACM cert domain matches
+resource "aws_route53_record" "alb" {
+  count = var.domain_name != "" && var.hosted_zone_id != "" ? 1 : 0
+
+  zone_id = data.aws_route53_zone.this[0].zone_id
+  name    = "alb-${var.project_name}-${terraform.workspace}.${var.domain_name}"
+  type    = "A"
+
+  alias {
+    name                   = module.alb.dns_name
+    zone_id                = module.alb.zone_id
+    evaluate_target_health = true
+  }
+}
+
 ################################################################################
 # CloudFront
 ################################################################################
@@ -743,7 +758,7 @@ resource "aws_cloudfront_distribution" "this" {
   aliases = var.domain_name != "" ? ["${var.project_name}-${terraform.workspace}.${var.domain_name}"] : []
 
   origin {
-    domain_name = module.alb.dns_name
+    domain_name = var.domain_name != "" && var.hosted_zone_id != "" ? aws_route53_record.alb[0].fqdn : module.alb.dns_name
     origin_id   = "alb"
 
     custom_origin_config {
