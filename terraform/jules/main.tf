@@ -503,10 +503,10 @@ resource "aws_ecs_service" "frontend" {
         }
         tls {
           issuer_cert_authority {
-            aws_pca_authority_arn = aws_acmpca_certificate_authority.this.arn
+            aws_pca_authority_arn = aws_acmpca_certificate_authority.this[0].arn
           }
-          kms_key  = aws_kms_key.service_connect_tls.arn
-          role_arn = aws_iam_role.ecs_sc_tls_infra.arn
+          kms_key  = aws_kms_key.service_connect_tls[0].arn
+          role_arn = aws_iam_role.ecs_sc_tls_infra[0].arn
         }
       }
     }
