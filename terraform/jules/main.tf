@@ -113,8 +113,15 @@ module "alb_sg" {
   description = "Security group for ALB"
   vpc_id      = module.vpc.vpc_id
 
-  ingress_prefix_list_ids = [data.aws_ec2_managed_prefix_list.cloudfront.id]
-  ingress_rules           = ["http-80-tcp", "https-443-tcp"]
+  ingress_with_prefix_list_ids = [
+    {
+      from_port         = 80
+      to_port           = 443
+      protocol          = "tcp"
+      prefix_list_ids   = data.aws_ec2_managed_prefix_list.cloudfront.id
+      description       = "HTTP/HTTPS from CloudFront"
+    }
+  ]
   egress_rules            = ["all-all"]
 }
 
@@ -394,7 +401,8 @@ module "frontend" {
   }
 
   # Create ONLY Task Definition, NOT Service
-  create_service = false
+  create_service         = false
+  create_security_group  = false
 
   cpu          = 140
   memory       = 450
@@ -546,7 +554,8 @@ module "microservices" {
   }
 
   # Create ONLY Task Definition, NOT Service
-  create_service = false
+  create_service         = false
+  create_security_group  = false
 
   cpu          = 140
   memory       = 450
