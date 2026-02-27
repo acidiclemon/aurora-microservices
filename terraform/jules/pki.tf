@@ -1,4 +1,11 @@
+################################################################################
+# Private Certificate Authority (PCA) for Service Connect TLS
+# Only created when domain_name is set (full encryption mode)
+################################################################################
+
 resource "aws_acmpca_certificate_authority" "this" {
+  count = var.domain_name != "" ? 1 : 0
+
   type = "ROOT"
 
   certificate_authority_configuration {
@@ -21,8 +28,10 @@ resource "aws_acmpca_certificate_authority" "this" {
 }
 
 resource "aws_acmpca_certificate" "root" {
-  certificate_authority_arn   = aws_acmpca_certificate_authority.this.arn
-  certificate_signing_request = aws_acmpca_certificate_authority.this.certificate_signing_request
+  count = var.domain_name != "" ? 1 : 0
+
+  certificate_authority_arn   = aws_acmpca_certificate_authority.this[0].arn
+  certificate_signing_request = aws_acmpca_certificate_authority.this[0].certificate_signing_request
   signing_algorithm           = "SHA256WITHRSA"
 
   template_arn = "arn:aws:acm-pca:::template/RootCACertificate/V1"
@@ -34,9 +43,11 @@ resource "aws_acmpca_certificate" "root" {
 }
 
 resource "aws_acmpca_certificate_authority_certificate" "root" {
-  certificate_authority_arn = aws_acmpca_certificate_authority.this.arn
-  certificate               = aws_acmpca_certificate.root.certificate
-  certificate_chain         = aws_acmpca_certificate.root.certificate_chain
+  count = var.domain_name != "" ? 1 : 0
+
+  certificate_authority_arn = aws_acmpca_certificate_authority.this[0].arn
+  certificate               = aws_acmpca_certificate.root[0].certificate
+  certificate_chain         = aws_acmpca_certificate.root[0].certificate_chain
 }
 
 ################################################################################
@@ -44,6 +55,8 @@ resource "aws_acmpca_certificate_authority_certificate" "root" {
 ################################################################################
 
 resource "aws_iam_role" "ecs_sc_tls_infra" {
+  count = var.domain_name != "" ? 1 : 0
+
   name = "${var.project_name}-${terraform.workspace}-ecs-sc-tls-infra-role"
 
   assume_role_policy = jsonencode({
@@ -66,7 +79,9 @@ resource "aws_iam_role" "ecs_sc_tls_infra" {
 }
 
 resource "aws_iam_role_policy_attachment" "ecs_sc_tls_infra" {
-  role       = aws_iam_role.ecs_sc_tls_infra.name
+  count = var.domain_name != "" ? 1 : 0
+
+  role       = aws_iam_role.ecs_sc_tls_infra[0].name
   policy_arn = "arn:aws:iam::aws:policy/service-role/AmazonECSInfrastructureRolePolicyForServiceConnectTransportLayerSecurity"
 }
 
@@ -75,6 +90,8 @@ resource "aws_iam_role_policy_attachment" "ecs_sc_tls_infra" {
 ################################################################################
 
 resource "aws_kms_key" "service_connect_tls" {
+  count = var.domain_name != "" ? 1 : 0
+
   description             = "KMS key for Service Connect TLS certificates"
   deletion_window_in_days = 7
   enable_key_rotation     = true
@@ -122,6 +139,8 @@ resource "aws_kms_key" "service_connect_tls" {
 }
 
 resource "aws_kms_alias" "service_connect_tls" {
+  count = var.domain_name != "" ? 1 : 0
+
   name          = "alias/${var.project_name}-${terraform.workspace}-service-connect-tls-key"
-  target_key_id = aws_kms_key.service_connect_tls.key_id
+  target_key_id = aws_kms_key.service_connect_tls[0].key_id
 }

@@ -61,10 +61,12 @@ resource "aws_iam_role_policy_attachment" "collector_xray" {
   policy_arn = "arn:aws:iam::aws:policy/AWSXRayDaemonWriteAccess"
 }
 
-# Attach Service Connect TLS Policy (defined in main.tf)
+# Attach Service Connect TLS Policy (defined in main.tf) — only when TLS is enabled
 resource "aws_iam_role_policy_attachment" "collector_sc_tls" {
+  count = var.domain_name != "" ? 1 : 0
+
   role       = aws_iam_role.collector_task_role.name
-  policy_arn = aws_iam_policy.service_connect_tls.arn
+  policy_arn = aws_iam_policy.service_connect_tls[0].arn
 }
 
 # Execution Role for Collector (for pulling images, logging)
@@ -185,13 +187,16 @@ resource "aws_ecs_service" "collector" {
         port     = 4317
         dns_name = "collector"
       }
-      # TLS Configuration for End-to-End Encryption
-      tls {
-        issuer_cert_authority {
-          aws_pca_authority_arn = aws_acmpca_certificate_authority.this.arn
+      # TLS Configuration for End-to-End Encryption (only when domain is set)
+      dynamic "tls" {
+        for_each = var.domain_name != "" ? [1] : []
+        content {
+          issuer_cert_authority {
+            aws_pca_authority_arn = aws_acmpca_certificate_authority.this[0].arn
+          }
+          kms_key  = aws_kms_key.service_connect_tls[0].arn
+          role_arn = aws_iam_role.ecs_sc_tls_infra[0].arn
         }
-        kms_key  = aws_kms_key.service_connect_tls.arn
-        role_arn = aws_iam_role.ecs_sc_tls_infra.arn
       }
     }
     log_configuration {

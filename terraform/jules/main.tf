@@ -357,6 +357,8 @@ resource "aws_service_discovery_private_dns_namespace" "service_connect" {
 ################################################################################
 
 resource "aws_iam_policy" "service_connect_tls" {
+  count = var.domain_name != "" ? 1 : 0
+
   name        = "${var.project_name}-${terraform.workspace}-sc-tls-policy"
   description = "Allow ECS tasks to communicate with ACM PCA for Service Connect TLS"
   policy      = jsonencode({
@@ -369,7 +371,7 @@ resource "aws_iam_policy" "service_connect_tls" {
           "acm-pca:GetCertificate",
           "acm-pca:IssueCertificate"
         ]
-        Resource = aws_acmpca_certificate_authority.this.arn
+        Resource = aws_acmpca_certificate_authority.this[0].arn
       }
     ]
   })
@@ -387,11 +389,11 @@ module "frontend" {
   name        = "${var.project_name}-${terraform.workspace}-frontend"
   cluster_arn = module.ecs.cluster_arn
 
-  # IAM Role for Service Connect TLS
+  # IAM Role for Service Connect TLS (only when TLS is enabled)
   create_tasks_iam_role = true
-  tasks_iam_role_policies = {
-    ServiceConnectTLS = aws_iam_policy.service_connect_tls.arn
-  }
+  tasks_iam_role_policies = var.domain_name != "" ? {
+    ServiceConnectTLS = aws_iam_policy.service_connect_tls[0].arn
+  } : {}
 
   # Create ONLY Task Definition, NOT Service
   create_service         = false
@@ -543,11 +545,11 @@ module "microservices" {
   name        = "${var.project_name}-${terraform.workspace}-${each.key}"
   cluster_arn = module.ecs.cluster_arn
 
-  # IAM Role for Service Connect TLS
+  # IAM Role for Service Connect TLS (only when TLS is enabled)
   create_tasks_iam_role = true
-  tasks_iam_role_policies = {
-    ServiceConnectTLS = aws_iam_policy.service_connect_tls.arn
-  }
+  tasks_iam_role_policies = var.domain_name != "" ? {
+    ServiceConnectTLS = aws_iam_policy.service_connect_tls[0].arn
+  } : {}
 
   # Create ONLY Task Definition, NOT Service
   create_service         = false
@@ -645,12 +647,15 @@ resource "aws_ecs_service" "microservices" {
         }
       }
 
-      tls {
-        issuer_cert_authority {
-          aws_pca_authority_arn = aws_acmpca_certificate_authority.this.arn
+      dynamic "tls" {
+        for_each = var.domain_name != "" ? [1] : []
+        content {
+          issuer_cert_authority {
+            aws_pca_authority_arn = aws_acmpca_certificate_authority.this[0].arn
+          }
+          kms_key  = aws_kms_key.service_connect_tls[0].arn
+          role_arn = aws_iam_role.ecs_sc_tls_infra[0].arn
         }
-        kms_key  = aws_kms_key.service_connect_tls.arn
-        role_arn = aws_iam_role.ecs_sc_tls_infra.arn
       }
     }
     log_configuration {
@@ -920,7 +925,7 @@ resource "null_resource" "ecs_pre_destroy" {
     aws_iam_role_policy_attachment.collector_sc_tls,
     aws_cloudwatch_log_group.collector,
 
-    # PKI & Certs
+    # PKI & Certs (only when TLS is enabled)
     aws_acmpca_certificate_authority.this,
     aws_acmpca_certificate.root,
     aws_acmpca_certificate_authority_certificate.root,
