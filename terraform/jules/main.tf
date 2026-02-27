@@ -18,7 +18,7 @@ locals {
   acm_certificate_arn = var.acm_certificate_id != "" ? "arn:aws:acm:us-east-1:${data.aws_caller_identity.current.account_id}:certificate/${var.acm_certificate_id}" : ""
 
   cluster_name = "${var.project_name}-${terraform.workspace}-cluster"
-  namespace    = "${var.project_name}-${terraform.workspace}.private"
+  namespace    = "${var.project_name}-${terraform.workspace}.sc"
 
   services = {
     adservice = {
@@ -34,12 +34,12 @@ locals {
       port = 5050
       env = [
         { name = "PORT", value = "5050" },
-        { name = "PRODUCT_CATALOG_SERVICE_ADDR", value = "${var.project_name}-${terraform.workspace}-productcatalogservice.${var.project_name}-${terraform.workspace}.private:3550" },
-        { name = "SHIPPING_SERVICE_ADDR", value = "${var.project_name}-${terraform.workspace}-shippingservice.${var.project_name}-${terraform.workspace}.private:50051" },
-        { name = "PAYMENT_SERVICE_ADDR", value = "${var.project_name}-${terraform.workspace}-paymentservice.${var.project_name}-${terraform.workspace}.private:50051" },
-        { name = "EMAIL_SERVICE_ADDR", value = "${var.project_name}-${terraform.workspace}-emailservice.${var.project_name}-${terraform.workspace}.private:8080" },
-        { name = "CURRENCY_SERVICE_ADDR", value = "${var.project_name}-${terraform.workspace}-currencyservice.${var.project_name}-${terraform.workspace}.private:7000" },
-        { name = "CART_SERVICE_ADDR", value = "${var.project_name}-${terraform.workspace}-cartservice.${var.project_name}-${terraform.workspace}.private:7070" }
+        { name = "PRODUCT_CATALOG_SERVICE_ADDR", value = "productcatalogservice:3550" },
+        { name = "SHIPPING_SERVICE_ADDR", value = "shippingservice:50051" },
+        { name = "PAYMENT_SERVICE_ADDR", value = "paymentservice:50051" },
+        { name = "EMAIL_SERVICE_ADDR", value = "emailservice:8080" },
+        { name = "CURRENCY_SERVICE_ADDR", value = "currencyservice:7000" },
+        { name = "CART_SERVICE_ADDR", value = "cartservice:7070" }
       ]
     }
     currencyservice = {
@@ -64,21 +64,12 @@ locals {
       port = 8080
       env = [
         { name = "PORT", value = "8080" },
-        { name = "PRODUCT_CATALOG_SERVICE_ADDR", value = "${var.project_name}-${terraform.workspace}-productcatalogservice.${var.project_name}-${terraform.workspace}.private:3550" }
+        { name = "PRODUCT_CATALOG_SERVICE_ADDR", value = "productcatalogservice:3550" }
       ]
     }
     shippingservice = {
       port = 50051
     }
-    # loadgenerator = {
-    #   # No port needed for service definition, but task needs envs
-    #   container_port = 80 # dummy port
-    #   env = [
-    #     { name = "FRONTEND_ADDR", value = module.alb.dns_name },
-    #     { name = "USERS", value = "10" }
-    #   ]
-    # }
-    # Shopping Assistant is skipped/commented out logic handled by not including it here
   }
 }
 
@@ -122,9 +113,9 @@ module "alb_sg" {
   description = "Security group for ALB"
   vpc_id      = module.vpc.vpc_id
 
-  ingress_prefix_list_ids = [data.aws_ec2_managed_prefix_list.cloudfront.id]
-  ingress_rules           = ["http-80-tcp"]
-  egress_rules            = ["all-all"]
+  ingress_cidr_blocks = ["0.0.0.0/0"]
+  ingress_rules       = ["http-80-tcp", "https-443-tcp"]
+  egress_rules        = ["all-all"]
 }
 
 module "ecs_sg" {
@@ -176,6 +167,37 @@ module "redis_sg" {
 # ALB
 ################################################################################
 
+# Regional ACM certificate for ALB (must be in the same region as the ALB)
+resource "aws_acm_certificate" "alb" {
+  count = var.domain_name != "" ? 1 : 0
+
+  domain_name       = "alb-${var.project_name}-${terraform.workspace}.${var.domain_name}"
+  validation_method = "DNS"
+
+  lifecycle {
+    create_before_destroy = true
+  }
+}
+
+resource "aws_route53_record" "alb_cert_validation" {
+  count = var.domain_name != "" && var.hosted_zone_id != "" ? 1 : 0
+
+  zone_id = data.aws_route53_zone.this[0].zone_id
+  name    = tolist(aws_acm_certificate.alb[0].domain_validation_options)[0].resource_record_name
+  type    = tolist(aws_acm_certificate.alb[0].domain_validation_options)[0].resource_record_type
+  records = [tolist(aws_acm_certificate.alb[0].domain_validation_options)[0].resource_record_value]
+  ttl     = 60
+
+  allow_overwrite = true
+}
+
+resource "aws_acm_certificate_validation" "alb" {
+  count = var.domain_name != "" && var.hosted_zone_id != "" ? 1 : 0
+
+  certificate_arn         = aws_acm_certificate.alb[0].arn
+  validation_record_fqdns = [aws_route53_record.alb_cert_validation[0].fqdn]
+}
+
 module "alb" {
   source  = "terraform-aws-modules/alb/aws"
   version = "~> 9.0"
@@ -189,25 +211,41 @@ module "alb" {
   enable_deletion_protection = false
   create_security_group = false
 
-  listeners = {
-    http = {
-      port     = 80
-      protocol = "HTTP"
-      forward = {
-        target_group_key = "frontend"
+  listeners = merge(
+    {
+      http = {
+        port     = 80
+        protocol = "HTTP"
+        forward = {
+          target_group_key = "frontend"
+        }
       }
-    }
-  }
+    },
+    var.domain_name != "" ? {
+      https = {
+        port            = 443
+        protocol        = "HTTPS"
+        ssl_policy      = "ELBSecurityPolicy-TLS13-1-2-2021-06"
+        certificate_arn = aws_acm_certificate_validation.alb[0].certificate_arn
+        forward = {
+          target_group_key = "frontend"
+        }
+      }
+    } : {}
+  )
 
   target_groups = {
     frontend = {
-      name_prefix      = "front"
-      backend_protocol = "HTTP"
-      backend_port     = 8080
-      target_type      = "ip"
+      name_prefix = "front"
+      protocol    = var.domain_name != "" ? "HTTPS" : "HTTP"
+      port        = 8080
+      target_type = "ip"
       health_check = {
-        path = "/_healthz"
+        path     = "/_healthz"
+        protocol = var.domain_name != "" ? "HTTPS" : "HTTP"
+        port     = 8080
       }
+      deregistration_delay = 30
       create_attachment = false
     }
   }
@@ -222,6 +260,11 @@ module "ecs" {
   version = "~> 5.11"
 
   cluster_name = local.cluster_name
+
+  # Service Connect Defaults (Cluster-level)
+  cluster_service_connect_defaults = {
+    namespace = aws_service_discovery_private_dns_namespace.service_connect.arn
+  }
 
   # Capacity Provider
   default_capacity_provider_use_fargate = false
@@ -300,41 +343,45 @@ module "autoscaling" {
 }
 
 ################################################################################
-# Service Discovery
+# Service Discovery (Service Connect)
 ################################################################################
 
-resource "aws_service_discovery_private_dns_namespace" "this" {
+resource "aws_service_discovery_private_dns_namespace" "service_connect" {
   name        = local.namespace
-  description = "Private DNS namespace for ECS services"
+  description = "Service Connect Namespace (Private DNS)"
   vpc         = module.vpc.vpc_id
 }
 
-resource "aws_service_discovery_service" "this" {
-  for_each = local.services
+################################################################################
+# IAM Policies
+################################################################################
 
-  name = "${var.project_name}-${terraform.workspace}-${each.key}"
+resource "aws_iam_policy" "service_connect_tls" {
+  count = var.domain_name != "" ? 1 : 0
 
-  dns_config {
-    namespace_id = aws_service_discovery_private_dns_namespace.this.id
-
-    dns_records {
-      ttl  = 10
-      type = "A"
-    }
-
-    routing_policy = "MULTIVALUE"
-  }
-
-  health_check_custom_config {
-    failure_threshold = 1
-  }
+  name        = "${var.project_name}-${terraform.workspace}-sc-tls-policy"
+  description = "Allow ECS tasks to communicate with ACM PCA for Service Connect TLS"
+  policy      = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect = "Allow"
+        Action = [
+          "acm-pca:DescribeCertificateAuthority",
+          "acm-pca:GetCertificate",
+          "acm-pca:IssueCertificate"
+        ]
+        Resource = aws_acmpca_certificate_authority.this[0].arn
+      }
+    ]
+  })
 }
 
 ################################################################################
 # ECS Services
 ################################################################################
 
-# Frontend Service
+# Frontend Service - Task Definition (using module)
 module "frontend" {
   source  = "terraform-aws-modules/ecs/aws//modules/service"
   version = "~> 5.11"
@@ -342,12 +389,20 @@ module "frontend" {
   name        = "${var.project_name}-${terraform.workspace}-frontend"
   cluster_arn = module.ecs.cluster_arn
 
-  create_tasks_iam_role = false
-  create_security_group = false
+  # IAM Role for Service Connect TLS (only when TLS is enabled)
+  create_tasks_iam_role = true
+  tasks_iam_role_policies = var.domain_name != "" ? {
+    ServiceConnectTLS = aws_iam_policy.service_connect_tls[0].arn
+  } : {}
+
+  # Create ONLY Task Definition, NOT Service
+  create_service         = false
+  create_security_group  = false
 
   cpu          = 140
   memory       = 450
   network_mode = "awsvpc"
+  requires_compatibilities = ["EC2"]
 
   container_definitions = {
     frontend = {
@@ -363,16 +418,16 @@ module "frontend" {
       ]
       environment = [
         { name = "PORT", value = "8080" },
-        { name = "PRODUCT_CATALOG_SERVICE_ADDR", value = "${var.project_name}-${terraform.workspace}-productcatalogservice.${var.project_name}-${terraform.workspace}.private:3550" },
-        { name = "CURRENCY_SERVICE_ADDR", value = "${var.project_name}-${terraform.workspace}-currencyservice.${var.project_name}-${terraform.workspace}.private:7000" },
-        { name = "CART_SERVICE_ADDR", value = "${var.project_name}-${terraform.workspace}-cartservice.${var.project_name}-${terraform.workspace}.private:7070" },
-        { name = "RECOMMENDATION_SERVICE_ADDR", value = "${var.project_name}-${terraform.workspace}-recommendationservice.${var.project_name}-${terraform.workspace}.private:8080" },
-        { name = "SHIPPING_SERVICE_ADDR", value = "${var.project_name}-${terraform.workspace}-shippingservice.${var.project_name}-${terraform.workspace}.private:50051" },
-        { name = "CHECKOUT_SERVICE_ADDR", value = "${var.project_name}-${terraform.workspace}-checkoutservice.${var.project_name}-${terraform.workspace}.private:5050" },
-        { name = "AD_SERVICE_ADDR", value = "${var.project_name}-${terraform.workspace}-adservice.${var.project_name}-${terraform.workspace}.private:9555" },
-        { name = "SHOPPING_ASSISTANT_SERVICE_ADDR", value = "${var.project_name}-${terraform.workspace}-shoppingassistantservice.${var.project_name}-${terraform.workspace}.private:8080" },
+        { name = "PRODUCT_CATALOG_SERVICE_ADDR", value = "productcatalogservice:3550" },
+        { name = "CURRENCY_SERVICE_ADDR", value = "currencyservice:7000" },
+        { name = "CART_SERVICE_ADDR", value = "cartservice:7070" },
+        { name = "RECOMMENDATION_SERVICE_ADDR", value = "recommendationservice:8080" },
+        { name = "SHIPPING_SERVICE_ADDR", value = "shippingservice:50051" },
+        { name = "CHECKOUT_SERVICE_ADDR", value = "checkoutservice:5050" },
+        { name = "AD_SERVICE_ADDR", value = "adservice:9555" },
+        { name = "SHOPPING_ASSISTANT_SERVICE_ADDR", value = "shoppingassistantservice:8080" },
         { name = "ENABLE_TRACING", value = "1" },
-        { name = "COLLECTOR_SERVICE_ADDR", value = "collector.${var.project_name}-${terraform.workspace}.private:4317" }
+        { name = "COLLECTOR_SERVICE_ADDR", value = "collector:4317" }
       ]
 
       # Explicitly managed log group in observability.tf
@@ -388,43 +443,99 @@ module "frontend" {
     }
   }
 
-  load_balancer = {
-    service = {
-      target_group_arn = module.alb.target_groups["frontend"].arn
-      container_name   = "frontend"
-      container_port   = 8080
-    }
-  }
+  subnet_ids         = module.vpc.private_subnets
+  security_group_ids = [module.ecs_sg.security_group_id]
+}
+
+# Frontend Service - Raw Service Resource
+resource "aws_ecs_service" "frontend" {
+  name            = "${var.project_name}-${terraform.workspace}-frontend"
+  cluster         = module.ecs.cluster_arn
+  force_delete    = true
+  task_definition = module.frontend.task_definition_arn
 
   desired_count = var.enable_ha ? 2 : 1
-  ordered_placement_strategy = var.enable_ha ? [
-    {
+
+  # Network Configuration
+  network_configuration {
+    subnets          = module.vpc.private_subnets
+    security_groups  = [module.ecs_sg.security_group_id]
+    assign_public_ip = false
+  }
+
+  # Load Balancer
+  load_balancer {
+    target_group_arn = module.alb.target_groups["frontend"].arn
+    container_name   = "frontend"
+    container_port   = 8080
+  }
+
+  # Capacity Provider Strategy
+  capacity_provider_strategy {
+    capacity_provider = "${var.project_name}-${terraform.workspace}-microservices"
+    weight            = 100
+    base              = 1
+  }
+
+  # Placement Strategy
+  dynamic "ordered_placement_strategy" {
+    for_each = var.enable_ha ? [1] : []
+    content {
       type  = "spread"
       field = "attribute:ecs.availability-zone"
     }
-  ] : []
+  }
 
-  autoscaling_min_capacity = var.enable_ha ? 2 : 1
-
-  capacity_provider_strategy = {
-    "${var.project_name}-${terraform.workspace}-microservices" = {
-      capacity_provider = "${var.project_name}-${terraform.workspace}-microservices"
-      weight            = 100
-      base              = 1
+  # Service Connect Configuration
+  # When domain_name is set: frontend exposes an inbound TLS service for ALB HTTPS.
+  # When domain_name is empty: client-only mode (outbound TLS only, inbound HTTP).
+  service_connect_configuration {
+    enabled   = true
+    namespace = aws_service_discovery_private_dns_namespace.service_connect.arn
+    dynamic "service" {
+      for_each = var.domain_name != "" ? [1] : []
+      content {
+        discovery_name = "frontend"
+        port_name      = "frontend-8080-tcp"
+        client_alias {
+          port     = 8080
+          dns_name = "frontend"
+        }
+        tls {
+          issuer_cert_authority {
+            aws_pca_authority_arn = aws_acmpca_certificate_authority.this[0].arn
+          }
+          kms_key  = aws_kms_key.service_connect_tls[0].arn
+          role_arn = aws_iam_role.ecs_sc_tls_infra[0].arn
+        }
+      }
+    }
+    log_configuration {
+      log_driver = "awslogs"
+      options = {
+        awslogs-group         = aws_cloudwatch_log_group.frontend.name
+        awslogs-region        = var.region
+        awslogs-stream-prefix = "ecs-sc"
+      }
     }
   }
 
-  requires_compatibilities = ["EC2"]
+  lifecycle {
+    ignore_changes = [desired_count]
+  }
 
-  subnet_ids         = module.vpc.private_subnets
-  security_group_ids = [module.ecs_sg.security_group_id]
+  timeouts {
+    delete = "15m"
+  }
 
-  force_delete = true
-
-  depends_on = [module.ecs]
+  depends_on = [
+    module.ecs,
+    module.vpc,
+    terraform_data.backend_readiness_gate
+  ]
 }
 
-# Backend Services (Loop)
+# Microservices - Task Definition (using module)
 module "microservices" {
   source  = "terraform-aws-modules/ecs/aws//modules/service"
   version = "~> 5.11"
@@ -434,12 +545,20 @@ module "microservices" {
   name        = "${var.project_name}-${terraform.workspace}-${each.key}"
   cluster_arn = module.ecs.cluster_arn
 
-  create_tasks_iam_role = false
-  create_security_group = false
+  # IAM Role for Service Connect TLS (only when TLS is enabled)
+  create_tasks_iam_role = true
+  tasks_iam_role_policies = var.domain_name != "" ? {
+    ServiceConnectTLS = aws_iam_policy.service_connect_tls[0].arn
+  } : {}
+
+  # Create ONLY Task Definition, NOT Service
+  create_service         = false
+  create_security_group  = false
 
   cpu          = 140
   memory       = 450
   network_mode = "awsvpc"
+  requires_compatibilities = ["EC2"]
 
   container_definitions = {
     (each.key) = {
@@ -474,36 +593,90 @@ module "microservices" {
     }
   }
 
-  service_registries = {
-    registry_arn = aws_service_discovery_service.this[each.key].arn
-  }
+  subnet_ids         = module.vpc.private_subnets
+  security_group_ids = [module.ecs_sg.security_group_id]
+}
+
+# Microservices - Raw Service Resource
+resource "aws_ecs_service" "microservices" {
+  for_each = local.services
+
+  name            = "${var.project_name}-${terraform.workspace}-${each.key}"
+  cluster         = module.ecs.cluster_arn
+  task_definition = module.microservices[each.key].task_definition_arn
+  force_delete    = true
 
   desired_count = var.enable_ha ? 2 : 1
-  ordered_placement_strategy = var.enable_ha ? [
-    {
+
+  # Network Configuration
+  network_configuration {
+    subnets          = module.vpc.private_subnets
+    security_groups  = [module.ecs_sg.security_group_id]
+    assign_public_ip = false
+  }
+
+  # Capacity Provider Strategy
+  capacity_provider_strategy {
+    capacity_provider = "${var.project_name}-${terraform.workspace}-microservices"
+    weight            = 100
+    base              = 1
+  }
+
+  # Placement Strategy
+  dynamic "ordered_placement_strategy" {
+    for_each = var.enable_ha ? [1] : []
+    content {
       type  = "spread"
       field = "attribute:ecs.availability-zone"
     }
-  ] : []
+  }
 
-  autoscaling_min_capacity = var.enable_ha ? 2 : 1
+  # Service Connect Configuration
+  service_connect_configuration {
+    enabled   = true
+    namespace = aws_service_discovery_private_dns_namespace.service_connect.arn
+    service {
+      discovery_name = each.key
+      port_name      = try(each.value.port, null) != null ? "${each.key}-${each.value.port}-tcp" : null
 
-  capacity_provider_strategy = {
-    "${var.project_name}-${terraform.workspace}-microservices" = {
-      capacity_provider = "${var.project_name}-${terraform.workspace}-microservices"
-      weight            = 100
-      base              = 1
+      dynamic "client_alias" {
+        for_each = try(each.value.port, null) != null ? [1] : []
+        content {
+          port     = each.value.port
+          dns_name = each.key
+        }
+      }
+
+      dynamic "tls" {
+        for_each = var.domain_name != "" ? [1] : []
+        content {
+          issuer_cert_authority {
+            aws_pca_authority_arn = aws_acmpca_certificate_authority.this[0].arn
+          }
+          kms_key  = aws_kms_key.service_connect_tls[0].arn
+          role_arn = aws_iam_role.ecs_sc_tls_infra[0].arn
+        }
+      }
+    }
+    log_configuration {
+      log_driver = "awslogs"
+      options = {
+        awslogs-group         = aws_cloudwatch_log_group.microservices[each.key].name
+        awslogs-region        = var.region
+        awslogs-stream-prefix = "ecs-sc"
+      }
     }
   }
 
-  requires_compatibilities = ["EC2"]
+  lifecycle {
+    ignore_changes = [desired_count]
+  }
 
-  subnet_ids         = module.vpc.private_subnets
-  security_group_ids = [module.ecs_sg.security_group_id]
+  timeouts {
+    delete = "15m"
+  }
 
-  force_delete = true
-
-  depends_on = [module.ecs]
+  depends_on = [module.ecs, module.vpc]
 }
 
 ################################################################################
@@ -563,6 +736,21 @@ resource "aws_route53_record" "this" {
   }
 }
 
+# ALB-specific DNS record — used as CloudFront origin so the ACM cert domain matches
+resource "aws_route53_record" "alb" {
+  count = var.domain_name != "" && var.hosted_zone_id != "" ? 1 : 0
+
+  zone_id = data.aws_route53_zone.this[0].zone_id
+  name    = "alb-${var.project_name}-${terraform.workspace}.${var.domain_name}"
+  type    = "A"
+
+  alias {
+    name                   = module.alb.dns_name
+    zone_id                = module.alb.zone_id
+    evaluate_target_health = true
+  }
+}
+
 ################################################################################
 # CloudFront
 ################################################################################
@@ -578,13 +766,13 @@ resource "aws_cloudfront_distribution" "this" {
   aliases = var.domain_name != "" ? ["${var.project_name}-${terraform.workspace}.${var.domain_name}"] : []
 
   origin {
-    domain_name = module.alb.dns_name
+    domain_name = var.domain_name != "" && var.hosted_zone_id != "" ? aws_route53_record.alb[0].fqdn : module.alb.dns_name
     origin_id   = "alb"
 
     custom_origin_config {
       http_port              = 80
       https_port             = 443
-      origin_protocol_policy = "http-only"
+      origin_protocol_policy = var.domain_name != "" ? "https-only" : "http-only"
       origin_ssl_protocols   = ["TLSv1.2"]
     }
   }
@@ -617,60 +805,175 @@ resource "aws_cloudfront_distribution" "this" {
 }
 
 ################################################################################
-# Cleanup Logic
+# Cleanup Logic — Pre-Destroy
+#
+# Runs BEFORE Terraform deletes ECS services. Does two things:
+#   1. Scales every service to desired_count=0 (stops ECS from respawning tasks)
+#   2. Force-stops ALL running tasks in the cluster
+#
+# This ensures DeleteService finds 0 running tasks, making it near-instant.
+# Combined with force_delete=true on the service resources for belt-and-suspenders.
 ################################################################################
 
-resource "null_resource" "ecs_asg_terminate" {
-  triggers = {
-    asg_name = module.autoscaling.autoscaling_group_name
-  }
-
-  provisioner "local-exec" {
-    when    = destroy
-    command = <<EOT
-      asg_name=${self.triggers.asg_name}
-      echo "Terminating instances in ASG $asg_name..."
-      instance_ids=$(aws autoscaling describe-auto-scaling-groups --auto-scaling-group-names "$asg_name" --query "AutoScalingGroups[0].Instances[].InstanceId" --output text)
-      if [ -n "$instance_ids" ] && [ "$instance_ids" != "None" ]; then
-        echo "Terminating instances: $instance_ids"
-        aws ec2 terminate-instances --instance-ids $instance_ids --no-cli-pager || true
-      else
-        echo "No instances found in ASG $asg_name."
-      fi
-    EOT
-  }
-
-  depends_on = [
-    module.frontend,
-    module.microservices
-  ]
-}
-
-resource "null_resource" "ecs_service_scale_down" {
+resource "null_resource" "ecs_pre_destroy" {
   triggers = {
     cluster_name = local.cluster_name
+    region       = var.region
   }
 
   provisioner "local-exec" {
     when    = destroy
     command = <<EOT
-      cluster_name=${self.triggers.cluster_name}
-      echo "Scaling down services in cluster $cluster_name..."
-      services=$(aws ecs list-services --cluster "$cluster_name" --query "serviceArns[]" --output text)
-      if [ -n "$services" ] && [ "$services" != "None" ]; then
-        for service in $services; do
-          echo "Scaling down service $service..."
-          aws ecs update-service --cluster "$cluster_name" --service "$service" --desired-count 0 --no-cli-pager || true
+      CLUSTER="${self.triggers.cluster_name}"
+      REGION="${self.triggers.region}"
+      echo "=== ECS Pre-Destroy Cleanup ==="
+      echo "Cluster: $CLUSTER | Region: $REGION"
+
+      # Step 1: Scale ALL services to desired_count=0 with force new deployment
+      echo "[1/4] Scaling all services to 0..."
+      SERVICES=$(aws ecs list-services --cluster "$CLUSTER" --region "$REGION" --query "serviceArns[]" --output text 2>/dev/null || true)
+      if [ -n "$SERVICES" ] && [ "$SERVICES" != "None" ]; then
+        for svc in $SERVICES; do
+          echo "  → $svc → desired_count=0"
+          aws ecs update-service --cluster "$CLUSTER" --service "$svc" --desired-count 0 --force-new-deployment --region "$REGION" --no-cli-pager > /dev/null 2>&1 || true
         done
-        echo "Waiting 60s for services to drain..."
-        sleep 60
       else
-        echo "No services found in cluster $cluster_name."
+        echo "  No services found."
       fi
+
+      # Step 2: Wait for tasks to actually stop
+      TASKS=$(aws ecs list-tasks --cluster "$CLUSTER" --region "$REGION" --query "taskArns[]" --output text 2>/dev/null || true)
+      if [ -n "$TASKS" ] && [ "$TASKS" != "None" ]; then
+        echo "[2/4] Waiting for tasks to stop..."
+        aws ecs wait tasks-stopped --cluster "$CLUSTER" --tasks $TASKS --region "$REGION" --no-cli-pager > /dev/null 2>&1 || true
+        echo "  All tasks stopped."
+      else
+        echo "[2/4] No tasks to wait for."
+      fi
+
+      # Step 3: DELETE all services (--force bypasses their own drain wait)
+      if [ -n "$SERVICES" ] && [ "$SERVICES" != "None" ]; then
+        echo "[3/4] Deleting all services..."
+        for svc in $SERVICES; do
+          echo "  → Deleting $svc"
+          aws ecs delete-service --cluster "$CLUSTER" --service "$svc" --force --region "$REGION" --no-cli-pager > /dev/null 2>&1 || true
+        done
+      else
+        echo "[3/4] No services to delete."
+      fi
+
+      # Step 4: Poll until ALL services reach INACTIVE (up to 20 minutes).
+      # Service Connect + TLS deregistration takes 10-20 min, so we use a custom
+      # loop that keeps polling until all services are gone or we time out.
+      if [ -n "$SERVICES" ] && [ "$SERVICES" != "None" ]; then
+        echo "[4/4] Waiting for all services to reach INACTIVE (up to 20m)..."
+        DEADLINE=$(( $(date +%s) + 660 ))  # 11 minutes from now
+        while [ $(date +%s) -lt $DEADLINE ]; do
+          STILL_ACTIVE=""
+          for svc in $SERVICES; do
+            STATUS=$(aws ecs describe-services --cluster "$CLUSTER" --services "$svc" --region "$REGION" --query "services[0].status" --output text 2>/dev/null || echo "MISSING")
+            if [ "$STATUS" != "INACTIVE" ] && [ "$STATUS" != "None" ] && [ "$STATUS" != "MISSING" ]; then
+              STILL_ACTIVE="$STILL_ACTIVE $svc($STATUS)"
+            fi
+          done
+          if [ -z "$STILL_ACTIVE" ]; then
+            echo "  All services are INACTIVE."
+            break
+          fi
+          echo "  Still waiting:$STILL_ACTIVE"
+          sleep 15
+        done
+      else
+        echo "[4/4] No services to wait for."
+      fi
+      echo "=== Pre-destroy cleanup complete ==="
     EOT
   }
 
   depends_on = [
-    null_resource.ecs_asg_terminate
+    # Services (already here)
+    aws_ecs_service.frontend,
+    aws_ecs_service.microservices,
+    aws_ecs_service.collector,
+
+    # Network & Compute
+    module.vpc,
+    module.alb,
+    module.alb_sg,
+    module.ecs_sg,
+    module.redis_sg,
+    module.ecs,
+    module.autoscaling,
+    module.redis,
+    aws_service_discovery_private_dns_namespace.service_connect,
+    aws_route53_record.this,
+    aws_cloudfront_distribution.this,
+
+    # Task Definitions
+    module.frontend,
+    module.microservices,
+    aws_ecs_task_definition.collector,
+
+    # IAM & Security (Main)
+    aws_iam_policy.service_connect_tls,
+    
+    # Collector Resources
+    aws_iam_role.collector_task_role,
+    aws_iam_role.collector_exec_role,
+    aws_iam_role_policy_attachment.collector_xray,
+    aws_iam_role_policy_attachment.collector_exec_policy,
+    aws_iam_role_policy_attachment.collector_sc_tls,
+    aws_cloudwatch_log_group.collector,
+
+    # PKI & Certs (only when TLS is enabled)
+    aws_acmpca_certificate_authority.this,
+    aws_acmpca_certificate.root,
+    aws_acmpca_certificate_authority_certificate.root,
+    aws_iam_role.ecs_sc_tls_infra,
+    aws_iam_role_policy_attachment.ecs_sc_tls_infra,
+    aws_kms_key.service_connect_tls,
+    aws_kms_alias.service_connect_tls,
+
+    # Observability - Logs & Metrics
+    aws_cloudwatch_log_group.frontend,
+    aws_cloudwatch_log_group.microservices,
+    aws_cloudwatch_log_metric_filter.frontend_errors,
+    aws_cloudwatch_log_metric_filter.checkout_errors,
+    aws_cloudwatch_log_metric_filter.payment_errors,
+    aws_cloudwatch_dashboard.main,
+    
+    # Observability - IAM & KMS
+    aws_iam_role.security_team_role,
+    aws_iam_role_policy.security_team_policy,
+    aws_kms_key.logs_key,
+    aws_kms_alias.logs_key,
+    aws_kms_key_policy.logs_key,
+
+    # Observability - S3 & Firehose
+    aws_s3_bucket.raw_logs,
+    aws_s3_bucket_server_side_encryption_configuration.raw_logs,
+    aws_s3_bucket_policy.raw_logs,
+    aws_s3_bucket.audit_findings,
+    aws_s3_bucket_server_side_encryption_configuration.audit_findings,
+    aws_s3_bucket_policy.audit_findings,
+    aws_cloudwatch_log_data_protection_policy.frontend,
+    aws_cloudwatch_log_data_protection_policy.microservices,
+    aws_cloudwatch_log_data_protection_policy.collector,
+    aws_iam_role.firehose_role,
+    aws_iam_role_policy.firehose_policy,
+    aws_kinesis_firehose_delivery_stream.logs_stream,
+    aws_iam_role.logs_subscription_role,
+    aws_iam_role_policy.logs_subscription_policy,
+    aws_cloudwatch_log_subscription_filter.frontend,
+    aws_cloudwatch_log_subscription_filter.microservices,
+
+    # Canaries
+    aws_s3_bucket.canary_artifacts,
+    aws_s3_bucket_lifecycle_configuration.canary_artifacts,
+    aws_iam_role.canary_role,
+    aws_iam_role_policy.canary_policy,
+    aws_synthetics_canary.home,
+    aws_synthetics_canary.product,
+    aws_synthetics_canary.cart
   ]
 }

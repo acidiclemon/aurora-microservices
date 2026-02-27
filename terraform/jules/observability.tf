@@ -435,6 +435,13 @@ resource "aws_s3_bucket_policy" "audit_findings" {
 # Log Data Protection Policy
 # ------------------------------------------------------------------------------
 
+# Create a time_sleep to handle S3 bucket policy eventual consistency
+resource "time_sleep" "wait_for_bucket_policy" {
+  depends_on = [aws_s3_bucket_policy.audit_findings]
+
+  create_duration = "60s"
+}
+
 locals {
   data_protection_policy = jsonencode({
     Name        = "data-protection-policy"
@@ -485,7 +492,7 @@ resource "aws_cloudwatch_log_data_protection_policy" "frontend" {
   log_group_name  = aws_cloudwatch_log_group.frontend.name
   policy_document = local.data_protection_policy
 
-  depends_on = [aws_s3_bucket_policy.audit_findings]
+  depends_on = [time_sleep.wait_for_bucket_policy]
 }
 
 resource "aws_cloudwatch_log_data_protection_policy" "microservices" {
@@ -494,14 +501,14 @@ resource "aws_cloudwatch_log_data_protection_policy" "microservices" {
   log_group_name  = aws_cloudwatch_log_group.microservices[each.key].name
   policy_document = local.data_protection_policy
 
-  depends_on = [aws_s3_bucket_policy.audit_findings]
+  depends_on = [time_sleep.wait_for_bucket_policy]
 }
 
 resource "aws_cloudwatch_log_data_protection_policy" "collector" {
   log_group_name  = aws_cloudwatch_log_group.collector.name
   policy_document = local.data_protection_policy
 
-  depends_on = [aws_s3_bucket_policy.audit_findings]
+  depends_on = [time_sleep.wait_for_bucket_policy]
 }
 
 # ------------------------------------------------------------------------------

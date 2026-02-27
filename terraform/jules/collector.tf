@@ -61,24 +61,35 @@ resource "aws_iam_role_policy_attachment" "collector_xray" {
   policy_arn = "arn:aws:iam::aws:policy/AWSXRayDaemonWriteAccess"
 }
 
-# Service Discovery for Collector
-resource "aws_service_discovery_service" "collector" {
-  name = "collector"
+# Attach Service Connect TLS Policy (defined in main.tf) — only when TLS is enabled
+resource "aws_iam_role_policy_attachment" "collector_sc_tls" {
+  count = var.domain_name != "" ? 1 : 0
 
-  dns_config {
-    namespace_id = aws_service_discovery_private_dns_namespace.this.id
+  role       = aws_iam_role.collector_task_role.name
+  policy_arn = aws_iam_policy.service_connect_tls[0].arn
+}
 
-    dns_records {
-      ttl  = 10
-      type = "A"
-    }
+# Execution Role for Collector (for pulling images, logging)
+resource "aws_iam_role" "collector_exec_role" {
+  name = "${var.project_name}-${terraform.workspace}-collector-exec-role"
 
-    routing_policy = "MULTIVALUE"
-  }
+  assume_role_policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Action = "sts:AssumeRole"
+        Effect = "Allow"
+        Principal = {
+          Service = "ecs-tasks.amazonaws.com"
+        }
+      }
+    ]
+  })
+}
 
-  health_check_custom_config {
-    failure_threshold = 1
-  }
+resource "aws_iam_role_policy_attachment" "collector_exec_policy" {
+  role       = aws_iam_role.collector_exec_role.name
+  policy_arn = "arn:aws:iam::aws:policy/service-role/AmazonECSTaskExecutionRolePolicy"
 }
 
 # Log Group for Collector
@@ -87,31 +98,22 @@ resource "aws_cloudwatch_log_group" "collector" {
   retention_in_days = 30
 }
 
-# ECS Service for ADOT Collector
-module "collector" {
-  source  = "terraform-aws-modules/ecs/aws//modules/service"
-  version = "~> 5.11"
+# ECS Task Definition for Collector
+resource "aws_ecs_task_definition" "collector" {
+  family                   = "${var.project_name}-${terraform.workspace}-collector"
+  network_mode             = "awsvpc"
+  requires_compatibilities = ["EC2"]
+  cpu                      = 256
+  memory                   = 512
+  task_role_arn            = aws_iam_role.collector_task_role.arn
+  execution_role_arn       = aws_iam_role.collector_exec_role.arn
 
-  name        = "${var.project_name}-${terraform.workspace}-collector"
-  cluster_arn = module.ecs.cluster_arn
-
-  # We use our custom task role created above
-  create_tasks_iam_role = false
-  tasks_iam_role_arn    = aws_iam_role.collector_task_role.arn
-
-  create_security_group = false
-
-  cpu          = 256
-  memory       = 512
-  network_mode = "awsvpc"
-
-  container_definitions = {
-    collector = {
+  container_definitions = jsonencode([
+    {
+      name      = "collector"
       image     = "public.ecr.aws/aws-observability/aws-otel-collector:latest"
       essential = true
-
-      # Expose OTLP ports
-      port_mappings = [
+      portMappings = [
         {
           name          = "collector-4317-tcp"
           containerPort = 4317
@@ -125,17 +127,13 @@ module "collector" {
           protocol      = "tcp"
         }
       ]
-
       environment = [
         {
           name  = "AOT_CONFIG_CONTENT"
           value = local.otel_config
         }
       ]
-
-      # Logging to CloudWatch
-      enable_cloudwatch_logging = false
-      log_configuration = {
+      logConfiguration = {
         logDriver = "awslogs"
         options = {
           awslogs-group         = aws_cloudwatch_log_group.collector.name
@@ -144,37 +142,80 @@ module "collector" {
         }
       }
     }
+  ])
+}
+
+# ECS Service for ADOT Collector (Raw Resource to bypass module issues)
+resource "aws_ecs_service" "collector" {
+  name            = "${var.project_name}-${terraform.workspace}-collector"
+  cluster         = module.ecs.cluster_arn
+  task_definition = aws_ecs_task_definition.collector.arn
+  force_delete    = true
+  desired_count   = var.enable_ha ? 2 : 1
+
+  # Network Configuration
+  network_configuration {
+    subnets          = module.vpc.private_subnets
+    security_groups  = [module.ecs_sg.security_group_id]
+    assign_public_ip = false
   }
 
-  service_registries = {
-    registry_arn = aws_service_discovery_service.collector.arn
+  # Capacity Provider Strategy
+  capacity_provider_strategy {
+    capacity_provider = "${var.project_name}-${terraform.workspace}-microservices"
+    weight            = 100
+    base              = 1
   }
 
-  desired_count = var.enable_ha ? 2 : 1
-  ordered_placement_strategy = var.enable_ha ? [
-    {
+  # Placement Strategy
+  dynamic "ordered_placement_strategy" {
+    for_each = var.enable_ha ? [1] : []
+    content {
       type  = "spread"
       field = "attribute:ecs.availability-zone"
     }
-  ] : []
+  }
 
-  autoscaling_min_capacity = var.enable_ha ? 2 : 1
-
-  # Run on EC2 instances (same as other microservices)
-  capacity_provider_strategy = {
-    "${var.project_name}-${terraform.workspace}-microservices" = {
-      capacity_provider = "${var.project_name}-${terraform.workspace}-microservices"
-      weight            = 100
-      base              = 1
+  # Service Connect Configuration
+  service_connect_configuration {
+    enabled   = true
+    namespace = aws_service_discovery_private_dns_namespace.service_connect.arn
+    service {
+      discovery_name = "collector"
+      port_name      = "collector-4317-tcp"
+      client_alias {
+        port     = 4317
+        dns_name = "collector"
+      }
+      # TLS Configuration for End-to-End Encryption (only when domain is set)
+      dynamic "tls" {
+        for_each = var.domain_name != "" ? [1] : []
+        content {
+          issuer_cert_authority {
+            aws_pca_authority_arn = aws_acmpca_certificate_authority.this[0].arn
+          }
+          kms_key  = aws_kms_key.service_connect_tls[0].arn
+          role_arn = aws_iam_role.ecs_sc_tls_infra[0].arn
+        }
+      }
+    }
+    log_configuration {
+      log_driver = "awslogs"
+      options = {
+        awslogs-group         = aws_cloudwatch_log_group.collector.name
+        awslogs-region        = var.region
+        awslogs-stream-prefix = "ecs-sc"
+      }
     }
   }
 
-  requires_compatibilities = ["EC2"]
+  lifecycle {
+    ignore_changes = [desired_count]
+  }
 
-  subnet_ids         = module.vpc.private_subnets
-  security_group_ids = [module.ecs_sg.security_group_id]
+  timeouts {
+    delete = "15m"
+  }
 
-  force_delete = true
-
-  depends_on = [module.ecs]
+  depends_on = [module.ecs, module.vpc]
 }
