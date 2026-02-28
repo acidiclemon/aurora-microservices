@@ -133,6 +133,27 @@ node {
                         """
                     }
 
+                    if (service == 'frontend') {
+                        stage("ZAP Scan ${service}") {
+                            sh """
+                                docker network create zap-net || true
+                                docker run -d --name ${service}-app --network zap-net ${params.SERVICE_REPO}/${service}:latest
+                                
+                                # Wait for service to be healthy
+                                sleep 10
+                                
+                                docker pull owasp/zap2docker-stable:latest
+                                docker run --rm --network zap-net -v \$(pwd):/zap/wrk/:rw \\
+                                    owasp/zap2docker-stable zap-baseline.py \\
+                                    -t http://${service}-app:8080 -r zap-report-${service}.html -I || true
+                                
+                                docker stop ${service}-app || true
+                                docker rm ${service}-app || true
+                            """
+                            archiveArtifacts artifacts: "zap-report-${service}.html", allowEmptyArchive: true
+                        }
+                    }
+
                     stage("Push ${service}") {
                         withCredentials([[$class: 'AmazonWebServicesCredentialsBinding', credentialsId: 'aws-creds',
                             accessKeyVariable: 'AWS_ACCESS_KEY_ID', secretKeyVariable: 'AWS_SECRET_ACCESS_KEY']]) {
