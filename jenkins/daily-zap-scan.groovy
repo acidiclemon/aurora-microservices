@@ -21,7 +21,7 @@ pipeline {
             steps {
                 sh '''
                 # Download the stable ZAP image
-                docker pull owasp/zap2docker-stable
+                docker pull zaproxy/zap-stable
                 
                 # Create a directory for the report
                 mkdir -p zap-reports
@@ -29,7 +29,7 @@ pipeline {
                 
                 # Run the full scan (Spider + Active Scan)
                 # The -I flag ignores warnings and non-zero exit codes so the pipeline doesn't fail on finding vulnerabilities
-                docker run --rm -v $(pwd)/zap-reports:/zap/wrk/:rw -t owasp/zap2docker-stable \
+                docker run --rm -v $(pwd)/zap-reports:/zap/wrk/:rw -t zaproxy/zap-stable \
                   zap-full-scan.py -t ${STAGING_URL} -r full_scan_report.html -I -a
                 '''
             }
