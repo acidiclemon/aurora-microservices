@@ -11,12 +11,24 @@ pipeline {
         cron('H 2 * * *')
     }
 
+    parameters {
+        string(name: 'STAGING_URL', defaultValue: '', description: 'The URL of the staging environment to scan')
+    }
+
     environment {
-        // TODO: Update this to match the actual deployed staging URL from Terraform outputs
-        STAGING_URL = "https://alb-aurora-microservices-staging.yourdomain.com"
+        STAGING_URL = "${params.STAGING_URL}"
     }
 
     stages {
+        stage('Validate Parameters') {
+            steps {
+                script {
+                    if (!params.STAGING_URL || params.STAGING_URL.trim() == '') {
+                        error 'STAGING_URL parameter is empty. Please provide a valid URL to scan.'
+                    }
+                }
+            }
+        }
         stage('OWASP ZAP Full Scan') {
             steps {
                 sh '''
