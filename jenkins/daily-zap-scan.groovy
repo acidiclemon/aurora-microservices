@@ -44,7 +44,7 @@ node {
                     
                     # Run the scan
                     docker run --name zap-scanner -v \$(pwd)/zap-reports:/zap/wrk/:rw zaproxy/zap-stable \\
-                      \${scanCmd}
+                      ${scanCmd}
                 """
             }
 
