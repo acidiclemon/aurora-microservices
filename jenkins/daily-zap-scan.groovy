@@ -52,17 +52,15 @@ pipeline {
         always {
             archiveArtifacts artifacts: 'zap-reports/*.html', allowEmptyArchive: true
             
-            stage('Cleanup') {
-                sh '''
-                # Force remove container in case pipeline was aborted while running
-                docker rm -f zap-scanner || true
-                '''
-                
-                // Fix permission issues created by the docker container running as root
-                sh 'chown -R 1000:1000 . || true'
-                
-                cleanWs(cleanWhenFailure: true, deleteDirs: true, disableDeferredWipeout: true)
-            }
+            sh '''
+            # Force remove container in case pipeline was aborted while running
+            docker rm -f zap-scanner || true
+            '''
+            
+            // Fix permission issues created by the docker container running as root
+            sh 'chown -R 1000:1000 . || true'
+            
+            cleanWs(cleanWhenFailure: true, deleteDirs: true, disableDeferredWipeout: true)
         }
     }
 }
