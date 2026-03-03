@@ -43,7 +43,7 @@ node {
                     chmod -R 777 zap-reports
                     
                     # Run the scan
-                    docker run --name zap-scanner -v \$(pwd)/zap-reports:/zap/wrk/:rw -t zaproxy/zap-stable \\
+                    docker run --name zap-scanner -v \$(pwd)/zap-reports:/zap/wrk/:rw zaproxy/zap-stable \\
                       \${scanCmd}
                 """
             }
