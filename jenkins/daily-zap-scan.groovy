@@ -40,20 +40,24 @@ node {
                     # Create a directory for the report
                     mkdir -p zap-reports
                     
-                    # Run the scan
-                    docker run --name zap-scanner -u root -v \$(pwd)/zap-reports:/zap/wrk/:rw zaproxy/zap-stable \\
+                    # Run the scan (we don't use -v volume mount because of Docker-in-Docker path mismatches)
+                    docker run --name zap-scanner -u root zaproxy/zap-stable \\
                       ${scanCmd}
                 """
             }
 
         } finally {
             stage('Cleanup') {
-                archiveArtifacts artifacts: 'zap-reports/*.html', allowEmptyArchive: true
-                
                 sh '''
-                    # Force remove container in case pipeline was aborted while running
+                    # Copy the reports out of the container before removing it
+                    mkdir -p zap-reports
+                    docker cp zap-scanner:/zap/wrk/. zap-reports/ || true
+                    
+                    # Force remove container
                     docker rm -f zap-scanner || true
                 '''
+                
+                archiveArtifacts artifacts: 'zap-reports/*.html', allowEmptyArchive: true
                 
                 // Fix permission issues created by the docker container running as root
                 sh 'chown -R 1000:1000 . || true'
