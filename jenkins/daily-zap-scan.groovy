@@ -29,7 +29,7 @@ node {
                 if (env.SCAN_TYPE == 'baseline') {
                     scanCmd = "zap-baseline.py -t ${env.zap_scan_target_url} -r ${reportName} -I"
                 } else if (env.SCAN_TYPE == 'full') {
-                    scanCmd = "zap-full-scan.py -t ${env.zap_scan_target_url} -r ${reportName} -a -I"
+                    scanCmd = "zap-full-scan.py -t ${env.zap_scan_target_url} -r ${reportName} -a -I -j -z \"-config ajaxSpider.browserId=firefox-headless\""
                 }
 
                 sh """
