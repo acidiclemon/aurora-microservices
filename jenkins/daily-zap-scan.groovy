@@ -39,8 +39,6 @@ node {
                     
                     # Create a directory for the report
                     mkdir -p zap-reports
-                    chown -R 1000:1000 zap-reports
-                    chmod -R 777 zap-reports
                     
                     # Run the scan
                     docker run --name zap-scanner -u root -v \$(pwd)/zap-reports:/zap/wrk/:rw zaproxy/zap-stable \\
