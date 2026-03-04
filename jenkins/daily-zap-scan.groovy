@@ -27,8 +27,7 @@ node {
                 def reportName = "${env.SCAN_TYPE}_scan_report.html"
                 
                 if (env.SCAN_TYPE == 'baseline') {
-                    // -m 2 limits the spider to 2 minutes max
-                    scanCmd = "zap-baseline.py -t ${env.zap_scan_target_url} -r ${reportName} -m 2 -I"
+                    scanCmd = "zap-baseline.py -t ${env.zap_scan_target_url} -r ${reportName} -I"
                 } else if (env.SCAN_TYPE == 'full') {
                     scanCmd = "zap-full-scan.py -t ${env.zap_scan_target_url} -r ${reportName} -a -I"
                 }
