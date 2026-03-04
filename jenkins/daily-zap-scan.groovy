@@ -40,8 +40,8 @@ node {
                     # Create a directory for the report
                     mkdir -p zap-reports
                     
-                    # Run the scan (we don't use -v volume mount because of Docker-in-Docker path mismatches)
-                    docker run --name zap-scanner -u root zaproxy/zap-stable \\
+                    # Run the scan (we use an anonymous volume to satisfy ZAP's mount check, then docker cp the report out)
+                    docker run --name zap-scanner -u root -v /zap/wrk zaproxy/zap-stable \\
                       ${scanCmd}
                 """
             }
