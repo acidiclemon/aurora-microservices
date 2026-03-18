@@ -10,6 +10,7 @@ data "aws_route53_zone" "primary" {
 
 # Fetch the existing ACM certificate for the application domain
 data "aws_acm_certificate" "app" {
+  provider    = aws.acm
   domain      = var.acm_certificate_domain
   types       = ["AMAZON_ISSUED"]
   most_recent = true

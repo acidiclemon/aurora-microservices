@@ -81,7 +81,7 @@ resource "aws_ecs_service" "echo" {
   cluster         = aws_ecs_cluster.main.id
   task_definition = aws_ecs_task_definition.echo.arn
   launch_type     = "FARGATE"
-  desired_count   = 2
+  desired_count   = 1
 
   network_configuration {
     subnets          = aws_subnet.private[*].id

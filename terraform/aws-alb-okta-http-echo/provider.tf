@@ -12,3 +12,9 @@ terraform {
 provider "aws" {
   region = var.aws_region
 }
+
+# The AWS provider specifically for fetching the ACM certificate from us-east-1
+provider "aws" {
+  alias  = "acm"
+  region = "us-east-1"
+}

@@ -16,13 +16,22 @@ resource "aws_security_group" "alb" {
     cidr_blocks = ["0.0.0.0/0"]
   }
 
-  # Allow all outbound to the VPC (to reach ECS Tasks)
+  # Allow outbound to VPC (to reach ECS Tasks)
   egress {
     description = "Allow all outbound traffic to VPC"
     from_port   = 0
     to_port     = 0
     protocol    = "-1"
     cidr_blocks = [var.vpc_cidr]
+  }
+
+  # Allow outbound HTTPS to the internet (required for OIDC token exchange with Okta)
+  egress {
+    description = "Allow HTTPS outbound to Okta for OIDC token exchange"
+    from_port   = 443
+    to_port     = 443
+    protocol    = "tcp"
+    cidr_blocks = ["0.0.0.0/0"]
   }
 
   tags = {
