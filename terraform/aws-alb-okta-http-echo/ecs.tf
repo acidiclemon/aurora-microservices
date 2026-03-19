@@ -42,10 +42,17 @@ resource "aws_ecs_task_definition" "echo" {
   execution_role_arn = aws_iam_role.ecs_task_execution_role.arn
   task_role_arn      = aws_iam_role.ecs_task_role.arn
 
+  runtime_platform {
+    operating_system_family = "LINUX"
+    cpu_architecture        = "ARM64"
+  }
+
   container_definitions = jsonencode([
     {
       name      = "http-echo"
-      image     = "mendhak/http-https-echo:33"
+      image     = "mendhak/http-https-echo:39"
+      cpu       = 192
+      memory    = 256
       essential = true
 
       portMappings = [
