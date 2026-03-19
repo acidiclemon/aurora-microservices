@@ -49,16 +49,29 @@ resource "aws_ecs_task_definition" "echo" {
 
   container_definitions = jsonencode([
     {
-      name      = "http-echo"
-      image     = "mendhak/http-https-echo:39"
+      name      = "grafana"
+      image     = "grafana/grafana:latest"
       essential = true
 
       portMappings = [
         {
-          containerPort = 8080
-          hostPort      = 8080
+          containerPort = 3000
+          hostPort      = 3000
           protocol      = "tcp"
         }
+      ]
+
+      environment = [
+        { name = "GF_SERVER_ROOT_URL", value = "https://${var.alb_record_name}/" },
+        { name = "GF_AUTH_OKTA_ENABLED", value = "true" },
+        { name = "GF_AUTH_OKTA_NAME", value = "Okta" },
+        { name = "GF_AUTH_OKTA_CLIENT_ID", value = var.okta_client_id },
+        { name = "GF_AUTH_OKTA_CLIENT_SECRET", value = var.okta_client_secret },
+        { name = "GF_AUTH_OKTA_AUTH_URL", value = var.okta_authorization_endpoint },
+        { name = "GF_AUTH_OKTA_TOKEN_URL", value = var.okta_token_endpoint },
+        { name = "GF_AUTH_OKTA_API_URL", value = var.okta_user_info_endpoint },
+        { name = "GF_AUTH_OKTA_ALLOW_SIGN_UP", value = "true" },
+        { name = "GF_SECURITY_ADMIN_PASSWORD", value = var.grafana_admin_password }
       ]
 
       logConfiguration = {
@@ -96,8 +109,8 @@ resource "aws_ecs_service" "echo" {
 
   load_balancer {
     target_group_arn = aws_lb_target_group.app.arn
-    container_name   = "http-echo"
-    container_port   = 8080
+    container_name   = "grafana"
+    container_port   = 3000
   }
 
   # Depends on the ALB listener to ensure the target group is fully registered first

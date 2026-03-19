@@ -78,3 +78,9 @@ variable "acm_certificate_domain" {
   description = "The domain name of the ACM certificate to attach to the ALB (must be issued and valid)"
   type        = string
 }
+
+variable "grafana_admin_password" {
+  description = "The default admin password for Grafana"
+  type        = string
+  sensitive   = true
+}
