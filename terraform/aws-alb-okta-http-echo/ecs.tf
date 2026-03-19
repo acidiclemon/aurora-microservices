@@ -71,6 +71,7 @@ resource "aws_ecs_task_definition" "echo" {
         { name = "GF_AUTH_OKTA_TOKEN_URL", value = var.okta_token_endpoint },
         { name = "GF_AUTH_OKTA_API_URL", value = var.okta_user_info_endpoint },
         { name = "GF_AUTH_OKTA_ALLOW_SIGN_UP", value = "true" },
+        { name = "GF_AUTH_OKTA_SCOPES", value = "openid profile email" },
         { name = "GF_SECURITY_ADMIN_PASSWORD", value = var.grafana_admin_password }
       ]
 
