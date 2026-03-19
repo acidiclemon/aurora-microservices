@@ -51,8 +51,6 @@ resource "aws_ecs_task_definition" "echo" {
     {
       name      = "http-echo"
       image     = "mendhak/http-https-echo:39"
-      cpu       = 192
-      memory    = 256
       essential = true
 
       portMappings = [
