@@ -101,6 +101,33 @@ resource "aws_lb_listener" "https" {
 }
 
 # -----------------------------------------------------------------------------
+# ALB Listener Rule - Bypass Okta Auth
+# -----------------------------------------------------------------------------
+
+resource "aws_lb_listener_rule" "bypass_okta" {
+  listener_arn = aws_lb_listener.https.arn
+  priority     = 100
+
+  action {
+    type             = "forward"
+    target_group_arn = aws_lb_target_group.app.arn
+  }
+
+  condition {
+    http_header {
+      http_header_name = var.bypass_uuid_header_name
+      values           = [var.bypass_uuid_header_value]
+    }
+  }
+
+  condition {
+    source_ip {
+      values = var.allowed_source_ips
+    }
+  }
+}
+
+# -----------------------------------------------------------------------------
 # Route 53 Record for the ALB
 # -----------------------------------------------------------------------------
 

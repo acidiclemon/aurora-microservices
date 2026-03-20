@@ -78,3 +78,19 @@ variable "acm_certificate_domain" {
   description = "The domain name of the ACM certificate to attach to the ALB (must be issued and valid)"
   type        = string
 }
+
+variable "allowed_source_ips" {
+  description = "List of source IP CIDRs allowed to bypass Okta authentication"
+  type        = list(string)
+}
+
+variable "bypass_uuid_header_name" {
+  description = "The name of the HTTP header required to bypass Okta auth"
+  type        = string
+}
+
+variable "bypass_uuid_header_value" {
+  description = "The value of the HTTP header required to bypass Okta auth"
+  type        = string
+  sensitive   = true
+}
