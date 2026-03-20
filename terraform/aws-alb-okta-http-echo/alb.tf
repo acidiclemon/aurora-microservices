@@ -38,13 +38,13 @@ resource "aws_lb" "app" {
 
 resource "aws_lb_target_group" "app" {
   name        = "${var.project_name}-tg"
-  port        = 8080
+  port        = 3000
   protocol    = "HTTP"
   vpc_id      = aws_vpc.main.id
   target_type = "ip" # Required for Fargate "awsvpc" network mode
 
   health_check {
-    path                = "/"
+    path                = "/api/health"
     protocol            = "HTTP"
     matcher             = "200-399"
     interval            = 30
@@ -69,29 +69,9 @@ resource "aws_lb_listener" "https" {
   ssl_policy        = "ELBSecurityPolicy-2016-08"
   certificate_arn   = data.aws_acm_certificate.app.arn
 
-  # Action 1: Authenticate via OIDC (Okta)
-  default_action {
-    type  = "authenticate-oidc"
-    order = 1
-
-    authenticate_oidc {
-      authorization_endpoint = var.okta_authorization_endpoint
-      client_id              = var.okta_client_id
-      client_secret          = var.okta_client_secret
-      issuer                 = var.okta_issuer
-      token_endpoint         = var.okta_token_endpoint
-      user_info_endpoint     = var.okta_user_info_endpoint
-      session_cookie_name    = "AWSELBAuthSessionCookie"
-
-      # Additional parameters like session timeout can be configured here
-      session_timeout = 3600
-    }
-  }
-
-  # Action 2: Forward to the Target Group if authentication matches
+  # Action 1: Forward directly to the Target Group (Grafana handles OAuth natively)
   default_action {
     type             = "forward"
-    order            = 2
     target_group_arn = aws_lb_target_group.app.arn
   }
 
