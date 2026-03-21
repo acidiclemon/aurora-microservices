@@ -69,30 +69,47 @@ resource "aws_lb_listener" "https" {
   ssl_policy        = "ELBSecurityPolicy-2016-08"
   certificate_arn   = data.aws_acm_certificate.app.arn
 
-  # Action 1: Authenticate via OIDC (Okta)
-  default_action {
-    type  = "authenticate-oidc"
-    order = 1
-
-    authenticate_oidc {
-      authorization_endpoint = var.okta_authorization_endpoint
-      client_id              = var.okta_client_id
-      client_secret          = var.okta_client_secret
-      issuer                 = var.okta_issuer
-      token_endpoint         = var.okta_token_endpoint
-      user_info_endpoint     = var.okta_user_info_endpoint
-      session_cookie_name    = "AWSELBAuthSessionCookie"
-
-      # Additional parameters like session timeout can be configured here
-      session_timeout = 3600
+  # Conditional Default Action: Block Access (if disable_okta_auth_redirect is true)
+  dynamic "default_action" {
+    for_each = var.disable_okta_auth_redirect ? [1] : []
+    content {
+      type = "fixed-response"
+      fixed_response {
+        content_type = "text/plain"
+        message_body = "Access Denied"
+        status_code  = "403"
+      }
     }
   }
 
-  # Action 2: Forward to the Target Group if authentication matches
-  default_action {
-    type             = "forward"
-    order            = 2
-    target_group_arn = aws_lb_target_group.app.arn
+  # Conditional Default Action: Authenticate via OIDC (if disable_okta_auth_redirect is false)
+  dynamic "default_action" {
+    for_each = var.disable_okta_auth_redirect ? [] : [1]
+    content {
+      type  = "authenticate-oidc"
+      order = 1
+
+      authenticate_oidc {
+        authorization_endpoint = var.okta_authorization_endpoint
+        client_id              = var.okta_client_id
+        client_secret          = var.okta_client_secret
+        issuer                 = var.okta_issuer
+        token_endpoint         = var.okta_token_endpoint
+        user_info_endpoint     = var.okta_user_info_endpoint
+        session_cookie_name    = "AWSELBAuthSessionCookie"
+        session_timeout        = 3600
+      }
+    }
+  }
+
+  # Conditional Default Action: Forward to the Target Group (if disable_okta_auth_redirect is false)
+  dynamic "default_action" {
+    for_each = var.disable_okta_auth_redirect ? [] : [1]
+    content {
+      type             = "forward"
+      order            = 2
+      target_group_arn = aws_lb_target_group.app.arn
+    }
   }
 
   tags = {
