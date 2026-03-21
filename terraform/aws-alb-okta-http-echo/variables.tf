@@ -94,3 +94,9 @@ variable "bypass_uuid_header_value" {
   type        = string
   sensitive   = true
 }
+
+variable "disable_okta_auth_redirect" {
+  description = "If true, blocks access completely instead of redirecting to Okta (unless bypass rule matches)"
+  type        = bool
+  default     = false
+}
