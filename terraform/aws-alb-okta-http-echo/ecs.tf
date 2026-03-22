@@ -33,7 +33,7 @@ resource "aws_ecs_cluster" "main" {
 # -----------------------------------------------------------------------------
 
 resource "aws_ecs_task_definition" "echo" {
-  family                   = "${var.project_name}-echo"
+  family                   = "${var.project_name}-juice-shop"
   requires_compatibilities = ["FARGATE"]
   network_mode             = "awsvpc"
   cpu                      = "256"
@@ -49,14 +49,14 @@ resource "aws_ecs_task_definition" "echo" {
 
   container_definitions = jsonencode([
     {
-      name      = "http-echo"
-      image     = "mendhak/http-https-echo:39"
+      name      = "juice-shop"
+      image     = "bkimminich/juice-shop"
       essential = true
 
       portMappings = [
         {
-          containerPort = 8080
-          hostPort      = 8080
+          containerPort = 3000
+          hostPort      = 3000
           protocol      = "tcp"
         }
       ]
@@ -82,7 +82,7 @@ resource "aws_ecs_task_definition" "echo" {
 # -----------------------------------------------------------------------------
 
 resource "aws_ecs_service" "echo" {
-  name            = "${var.project_name}-service"
+  name            = "${var.project_name}-juice-shop"
   cluster         = aws_ecs_cluster.main.id
   task_definition = aws_ecs_task_definition.echo.arn
   launch_type     = "FARGATE"
@@ -96,8 +96,8 @@ resource "aws_ecs_service" "echo" {
 
   load_balancer {
     target_group_arn = aws_lb_target_group.app.arn
-    container_name   = "http-echo"
-    container_port   = 8080
+    container_name   = "juice-shop"
+    container_port   = 3000
   }
 
   # Depends on the ALB listener to ensure the target group is fully registered first

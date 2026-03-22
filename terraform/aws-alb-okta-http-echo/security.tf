@@ -48,11 +48,11 @@ resource "aws_security_group" "ecs_tasks" {
   description = "Security group for ECS tasks running the echo server"
   vpc_id      = aws_vpc.main.id
 
-  # Strict isolation: Allow inbound strictly on port 8080 and ONLY from the ALB SG
+  # Strict isolation: Allow inbound strictly on port 3000 and ONLY from the ALB SG
   ingress {
     description     = "Allow inbound traffic from ALB exclusively"
-    from_port       = 8080
-    to_port         = 8080
+    from_port       = 3000
+    to_port         = 3000
     protocol        = "tcp"
     security_groups = [aws_security_group.alb.id]
   }

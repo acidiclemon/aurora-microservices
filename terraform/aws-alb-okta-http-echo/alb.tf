@@ -38,7 +38,7 @@ resource "aws_lb" "app" {
 
 resource "aws_lb_target_group" "app" {
   name        = "${var.project_name}-tg"
-  port        = 8080
+  port        = 3000
   protocol    = "HTTP"
   vpc_id      = aws_vpc.main.id
   target_type = "ip" # Required for Fargate "awsvpc" network mode
