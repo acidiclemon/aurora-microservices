@@ -52,7 +52,7 @@ node {
                         mkdir -p zap-reports
                         
                         # Run the scan (we use an anonymous volume to satisfy ZAP's mount check, then docker cp the report out)
-                        docker run --name zap-scanner -u root -v /zap/wrk zaproxy/zap-stable \\
+                        docker run --name zap-scanner -u root --shm-size="2g" -v /zap/wrk zaproxy/zap-stable \\
                           ${scanCmd}
                     """
                 }
