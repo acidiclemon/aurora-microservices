@@ -35,13 +35,13 @@ node {
                     
                     if (env.SCAN_TYPE == 'baseline') {
                         def zArgs = useAuth ? " -z \"${replacerArgs}\"" : ""
-                        scanCmd = "zap-baseline.py -t ${env.zap_scan_target_url} -r ${reportName} -I${zArgs}"
+                        scanCmd = "zap-baseline.py -t ${env.zap_scan_target_url} -r ${reportName} -J ${env.SCAN_TYPE}_scan_report.json -I${zArgs}"
                     } else if (env.SCAN_TYPE == 'full') {
                         def zArgs = "-config ajaxSpider.browserId=firefox-headless"
                         if (useAuth) {
                             zArgs += " ${replacerArgs}"
                         }
-                        scanCmd = "zap-full-scan.py -t ${env.zap_scan_target_url} -r ${reportName} -a -I -j -z \"${zArgs}\""
+                        scanCmd = "zap-full-scan.py -t ${env.zap_scan_target_url} -r ${reportName} -J ${env.SCAN_TYPE}_scan_report.json -a -I -j -z \"${zArgs}\""
                     }
 
                     sh """
@@ -57,6 +57,21 @@ node {
                         # Run the scan using the pre-chowned named volume
                         docker run --name zap-scanner --shm-size="2g" -v zap_wrk_${env.BUILD_NUMBER}:/zap/wrk zaproxy/zap-stable \\
                           ${scanCmd}
+                          
+                        # Extract the reports directly inside this try block for evaluation
+                        docker cp zap-scanner:/zap/wrk/. zap-reports/ || true
+                        
+                        # Evaluate the JSON report for High (3) or Critical (4) vulnerabilities
+                        if ls zap-reports/*.json 1> /dev/null 2>&1; then
+                            if grep -q '"riskcode": "3"' zap-reports/*.json || grep -q '"riskcode": "4"' zap-reports/*.json; then
+                                echo "❌ ZAP Scan identified HIGH or CRITICAL risk vulnerabilities! Failing the build."
+                                exit 1
+                            else
+                                echo "✅ No HIGH or CRITICAL risk vulnerabilities found."
+                            fi
+                        else
+                            echo "⚠️ Report JSON not found, skipping evaluation."
+                        fi
                     """
                 }
 
