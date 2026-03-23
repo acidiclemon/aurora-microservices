@@ -51,8 +51,8 @@ node {
                         # Create a directory for the report
                         mkdir -p zap-reports
                         
-                        # Run the scan (we use an anonymous volume to satisfy ZAP's mount check, then docker cp the report out)
-                        docker run --name zap-scanner -u root --shm-size="2g" -v /zap/wrk zaproxy/zap-stable \\
+                        # Run the scan (we use a tmpfs to satisfy ZAP's mount check and give the zap user write permissions, then docker cp the report out)
+                        docker run --name zap-scanner --shm-size="2g" --tmpfs /zap/wrk:uid=1000,gid=1000 zaproxy/zap-stable \\
                           ${scanCmd}
                     """
                 }
