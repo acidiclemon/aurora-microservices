@@ -5,7 +5,8 @@ node {
         pipelineTriggers([cron('H 2 * * *')]),
         parameters([
             string(name: 'zap_scan_target_url', defaultValue: '', description: 'The URL of the target environment to scan'),
-            choice(name: 'SCAN_TYPE', choices: ['baseline', 'full'], description: 'Type of ZAP scan to perform')
+            choice(name: 'SCAN_TYPE', choices: ['baseline', 'full'], description: 'Type of ZAP scan to perform'),
+            booleanParam(name: 'bypass_auth_with_header', defaultValue: false, description: 'Bypass authentication using X-Automation-Bypass header')
         ])
     ])
 
@@ -23,26 +24,46 @@ node {
             }
 
             stage("OWASP ZAP ${env.SCAN_TYPE.capitalize()} Scan") {
-                def scanCmd = ""
-                def reportName = "${env.SCAN_TYPE}_scan_report.html"
-                
-                if (env.SCAN_TYPE == 'baseline') {
-                    scanCmd = "zap-baseline.py -t ${env.zap_scan_target_url} -r ${reportName} -I"
-                } else if (env.SCAN_TYPE == 'full') {
-                    scanCmd = "zap-full-scan.py -t ${env.zap_scan_target_url} -r ${reportName} -a -I -j -z \"-config ajaxSpider.browserId=firefox-headless\""
+                def executeScan = { useAuth ->
+                    def scanCmd = ""
+                    def reportName = "${env.SCAN_TYPE}_scan_report.html"
+                    def replacerArgs = ""
+                    
+                    if (useAuth) {
+                        replacerArgs = "-config replacer.full_list(0).description=auth -config replacer.full_list(0).enabled=true -config replacer.full_list(0).matchtype=REQ_HEADER -config replacer.full_list(0).matchstr=X-Automation-Bypass -config replacer.full_list(0).regex=false -config replacer.full_list(0).replacement=\$BYPASS_SECRET"
+                    }
+                    
+                    if (env.SCAN_TYPE == 'baseline') {
+                        def zArgs = useAuth ? " -z \"${replacerArgs}\"" : ""
+                        scanCmd = "zap-baseline.py -t ${env.zap_scan_target_url} -r ${reportName} -I${zArgs}"
+                    } else if (env.SCAN_TYPE == 'full') {
+                        def zArgs = "-config ajaxSpider.browserId=firefox-headless"
+                        if (useAuth) {
+                            zArgs += " ${replacerArgs}"
+                        }
+                        scanCmd = "zap-full-scan.py -t ${env.zap_scan_target_url} -r ${reportName} -a -I -j -z \"${zArgs}\""
+                    }
+
+                    sh """
+                        # Download the stable ZAP image
+                        docker pull zaproxy/zap-stable
+                        
+                        # Create a directory for the report
+                        mkdir -p zap-reports
+                        
+                        # Run the scan (we use an anonymous volume to satisfy ZAP's mount check, then docker cp the report out)
+                        docker run --name zap-scanner -u root -v /zap/wrk zaproxy/zap-stable \\
+                          ${scanCmd}
+                    """
                 }
 
-                sh """
-                    # Download the stable ZAP image
-                    docker pull zaproxy/zap-stable
-                    
-                    # Create a directory for the report
-                    mkdir -p zap-reports
-                    
-                    # Run the scan (we use an anonymous volume to satisfy ZAP's mount check, then docker cp the report out)
-                    docker run --name zap-scanner -u root -v /zap/wrk zaproxy/zap-stable \\
-                      ${scanCmd}
-                """
+                if (params.bypass_auth_with_header) {
+                    withCredentials([string(credentialsId: 'X-Automation-Bypass-Secret', variable: 'BYPASS_SECRET')]) {
+                        executeScan(true)
+                    }
+                } else {
+                    executeScan(false)
+                }
             }
 
         } finally {
