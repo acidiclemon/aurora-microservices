@@ -51,8 +51,11 @@ node {
                         # Create a directory for the report
                         mkdir -p zap-reports
                         
-                        # Run the scan (we use a tmpfs to satisfy ZAP's mount check and give the zap user write permissions, then docker cp the report out)
-                        docker run --name zap-scanner --shm-size="2g" --tmpfs /zap/wrk:uid=1000,gid=1000 zaproxy/zap-stable \\
+                        # Create a unique named volume and fix permissions using root before dropping to the zap user
+                        docker run --rm -u root -v zap_wrk_${env.BUILD_NUMBER}:/zap/wrk zaproxy/zap-stable chown -R 1000:1000 /zap/wrk
+                        
+                        # Run the scan using the pre-chowned named volume
+                        docker run --name zap-scanner --shm-size="2g" -v zap_wrk_${env.BUILD_NUMBER}:/zap/wrk zaproxy/zap-stable \\
                           ${scanCmd}
                     """
                 }
@@ -68,14 +71,15 @@ node {
 
         } finally {
             stage('Cleanup') {
-                sh '''
-                    # Copy the reports out of the container before removing it
+                sh """
+                    # Copy the reports out of the container volume before removing it
                     mkdir -p zap-reports
                     docker cp zap-scanner:/zap/wrk/. zap-reports/ || true
                     
-                    # Force remove container
+                    # Force remove container and volume
                     docker rm -f zap-scanner || true
-                '''
+                    docker volume rm zap_wrk_${env.BUILD_NUMBER} || true
+                """
                 
                 archiveArtifacts artifacts: 'zap-reports/*.html', allowEmptyArchive: true
                 
