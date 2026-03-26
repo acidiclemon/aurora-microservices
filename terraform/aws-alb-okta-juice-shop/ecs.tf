@@ -3,7 +3,7 @@
 # -----------------------------------------------------------------------------
 
 resource "aws_cloudwatch_log_group" "ecs_logs" {
-  name              = "/ecs/${var.project_name}-echo-server"
+  name              = "/ecs/${var.project_name}-server"
   retention_in_days = 7
 
   tags = {
@@ -32,7 +32,7 @@ resource "aws_ecs_cluster" "main" {
 # ECS Task Definition
 # -----------------------------------------------------------------------------
 
-resource "aws_ecs_task_definition" "echo" {
+resource "aws_ecs_task_definition" "juice_shop" {
   family                   = "${var.project_name}-juice-shop"
   requires_compatibilities = ["FARGATE"]
   network_mode             = "awsvpc"
@@ -81,10 +81,10 @@ resource "aws_ecs_task_definition" "echo" {
 # ECS Service
 # -----------------------------------------------------------------------------
 
-resource "aws_ecs_service" "echo" {
+resource "aws_ecs_service" "juice_shop" {
   name            = "${var.project_name}-juice-shop"
   cluster         = aws_ecs_cluster.main.id
-  task_definition = aws_ecs_task_definition.echo.arn
+  task_definition = aws_ecs_task_definition.juice_shop.arn
   launch_type     = "FARGATE"
   desired_count   = 1
 
