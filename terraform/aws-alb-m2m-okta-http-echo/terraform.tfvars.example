@@ -1,0 +1,22 @@
+# -----------------------------------------------------------------------------
+# Okta Configuration
+# -----------------------------------------------------------------------------
+
+okta_client_id = "YOUR_CLIENT_ID"
+okta_client_secret = "YOUR_CLIENT_SECRET"
+okta_issuer = "https://your-domain.okta.com/oauth2/default"
+okta_authorization_endpoint = "https://your-domain.okta.com/oauth2/default/v1/authorize"
+okta_token_endpoint = "https://your-domain.okta.com/oauth2/default/v1/token"
+okta_user_info_endpoint = "https://your-domain.okta.com/oauth2/default/v1/userinfo"
+bypass_uuid_header_name = "X-Bypass-Header"
+bypass_uuid_header_value = "your-secret-uuid"
+allowed_source_ips = ["203.0.113.0/32"]
+disable_okta_auth_redirect = false
+
+# -----------------------------------------------------------------------------
+# DNS & HTTPS Configuration
+# -----------------------------------------------------------------------------
+
+route53_zone_name = "example.com"
+alb_record_name = "echo.example.com"
+acm_certificate_domain = "example.com"
