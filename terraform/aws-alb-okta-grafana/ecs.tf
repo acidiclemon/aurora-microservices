@@ -3,7 +3,7 @@
 # -----------------------------------------------------------------------------
 
 resource "aws_cloudwatch_log_group" "ecs_logs" {
-  name              = "/ecs/${var.project_name}-echo-server"
+  name              = "/ecs/${var.project_name}-server"
   retention_in_days = 7
 
   tags = {
@@ -32,8 +32,8 @@ resource "aws_ecs_cluster" "main" {
 # ECS Task Definition
 # -----------------------------------------------------------------------------
 
-resource "aws_ecs_task_definition" "echo" {
-  family                   = "${var.project_name}-echo"
+resource "aws_ecs_task_definition" "grafana" {
+  family                   = "${var.project_name}-grafana"
   requires_compatibilities = ["FARGATE"]
   network_mode             = "awsvpc"
   cpu                      = "256"
@@ -95,10 +95,10 @@ resource "aws_ecs_task_definition" "echo" {
 # ECS Service
 # -----------------------------------------------------------------------------
 
-resource "aws_ecs_service" "echo" {
-  name            = "${var.project_name}-service"
+resource "aws_ecs_service" "grafana" {
+  name            = "${var.project_name}-grafana"
   cluster         = aws_ecs_cluster.main.id
-  task_definition = aws_ecs_task_definition.echo.arn
+  task_definition = aws_ecs_task_definition.grafana.arn
   launch_type     = "FARGATE"
   desired_count   = 1
 

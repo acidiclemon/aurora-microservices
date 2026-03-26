@@ -11,7 +11,7 @@ variable "aws_region" {
 variable "project_name" {
   description = "Project name prefix used for resource naming"
   type        = string
-  default     = "alb-okta-echo"
+  default     = "alb-okta-grafana"
 }
 
 # -----------------------------------------------------------------------------
