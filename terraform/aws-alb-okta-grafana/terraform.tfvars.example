@@ -1,0 +1,21 @@
+# -----------------------------------------------------------------------------
+# Okta Configuration
+# -----------------------------------------------------------------------------
+
+okta_client_id = "YOUR_CLIENT_ID"
+okta_client_secret = "YOUR_CLIENT_SECRET"
+okta_issuer = "https://your-domain.okta.com/oauth2/default"
+okta_authorization_endpoint = "https://your-domain.okta.com/oauth2/default/v1/authorize"
+okta_token_endpoint = "https://your-domain.okta.com/oauth2/default/v1/token"
+okta_user_info_endpoint = "https://your-domain.okta.com/oauth2/default/v1/userinfo"
+
+# Grafana Admin Password
+grafana_admin_password = "SecurePassword123"
+
+# -----------------------------------------------------------------------------
+# DNS & HTTPS Configuration
+# -----------------------------------------------------------------------------
+
+route53_zone_name = "example.com"
+alb_record_name = "grafana.example.com"
+acm_certificate_domain = "example.com"
