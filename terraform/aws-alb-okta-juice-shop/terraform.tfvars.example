@@ -1,0 +1,46 @@
+# -----------------------------------------------------------------------------
+# Okta Configuration
+# -----------------------------------------------------------------------------
+
+# The OIDC client ID from Okta
+okta_client_id = "YOUR_CLIENT_ID"
+
+# The OIDC client secret from Okta
+okta_client_secret = "YOUR_CLIENT_SECRET"
+
+# The OIDC issuer URL
+okta_issuer = "https://your-domain.okta.com/oauth2/default"
+
+# The Okta authorization endpoint URL
+okta_authorization_endpoint = "https://your-domain.okta.com/oauth2/default/v1/authorize"
+
+# The Okta token endpoint URL
+okta_token_endpoint = "https://your-domain.okta.com/oauth2/default/v1/token"
+
+# The Okta user info endpoint URL
+okta_user_info_endpoint = "https://your-domain.okta.com/oauth2/default/v1/userinfo"
+
+# Bypass authentication header name
+bypass_uuid_header_name = "X-Bypass-Header"
+
+# Bypass authentication header secret value
+bypass_uuid_header_value = "your-secret-uuid"
+
+# List of allowed source IPs for bypass
+allowed_source_ips = ["203.0.113.0/32"]
+
+# If true, blocks access completely instead of redirecting to Okta (unless bypass rule matches)
+disable_okta_auth_redirect = false
+
+# -----------------------------------------------------------------------------
+# DNS & HTTPS Configuration
+# -----------------------------------------------------------------------------
+
+# The Route 53 Hosted Zone name for your domain (e.g., example.com)
+route53_zone_name = "example.com"
+
+# The sub-domain intended for the application (e.g., echo.example.com)
+alb_record_name = "juice-shop.example.com"
+
+# The domain name of the ACM certificate to attach to the ALB
+acm_certificate_domain = "example.com"
