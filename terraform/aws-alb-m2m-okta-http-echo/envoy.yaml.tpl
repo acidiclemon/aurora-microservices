@@ -66,6 +66,7 @@ static_resources:
       name: envoy.transport_sockets.tls
       typed_config:
         "@type": type.googleapis.com/envoy.extensions.transport_sockets.tls.v3.UpstreamTlsContext
+        sni: "${okta_domain}"
     load_assignment:
       cluster_name: okta_jwks_cluster
       endpoints:
