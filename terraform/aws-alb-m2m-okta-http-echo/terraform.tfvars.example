@@ -11,7 +11,9 @@ okta_user_info_endpoint = "https://your-domain.okta.com/oauth2/default/v1/userin
 bypass_uuid_header_name = "X-Bypass-Header"
 bypass_uuid_header_value = "your-secret-uuid"
 allowed_source_ips = ["203.0.113.0/32"]
+enable_bypass_rule = true
 disable_okta_auth_redirect = false
+api_allowed_source_ips = ["0.0.0.0/0"]
 
 # -----------------------------------------------------------------------------
 # DNS & HTTPS Configuration

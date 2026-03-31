@@ -144,6 +144,7 @@ resource "aws_lb_listener" "https" {
 # -----------------------------------------------------------------------------
 
 resource "aws_lb_listener_rule" "bypass_okta" {
+  count        = var.enable_bypass_rule ? 1 : 0
   listener_arn = aws_lb_listener.https.arn
   priority     = 100
 
@@ -178,6 +179,12 @@ resource "aws_lb_listener_rule" "api_m2m" {
   condition {
     host_header {
       values = [var.api_record_name]
+    }
+  }
+
+  condition {
+    source_ip {
+      values = var.api_allowed_source_ips
     }
   }
 }

@@ -105,3 +105,15 @@ variable "disable_okta_auth_redirect" {
   type        = bool
   default     = false
 }
+
+variable "api_allowed_source_ips" {
+  description = "List of allowed IP CIDR blocks for the M2M API endpoint"
+  type        = list(string)
+  default     = ["0.0.0.0/0"]
+}
+
+variable "enable_bypass_rule" {
+  description = "If true, creates the bypass_okta ALB listener rule allowing header-based and IP-based authentication bypass"
+  type        = bool
+  default     = true
+}
