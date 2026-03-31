@@ -32,11 +32,6 @@ resource "aws_ecs_cluster" "main" {
 # ECS Task Definition
 # -----------------------------------------------------------------------------
 
-resource "random_password" "oauth2_cookie_secret" {
-  length  = 32
-  special = false
-}
-
 resource "aws_ecs_task_definition" "echo" {
   family                   = "${var.project_name}-echo"
   requires_compatibilities = ["FARGATE"]
@@ -76,8 +71,8 @@ resource "aws_ecs_task_definition" "echo" {
       }
     },
     {
-      name      = "oauth2-proxy"
-      image     = "quay.io/oauth2-proxy/oauth2-proxy:v7.6.0"
+      name      = "envoy"
+      image     = "envoyproxy/envoy:v1.30-latest"
       essential = true
 
       portMappings = [
@@ -88,17 +83,20 @@ resource "aws_ecs_task_definition" "echo" {
         }
       ]
 
+      environment = [
+        {
+          name = "ENVOY_CONFIG_YAML"
+          value = templatefile("${path.module}/envoy.yaml.tpl", {
+            okta_issuer = var.okta_issuer
+            okta_domain = replace(replace(var.okta_issuer, "https://", ""), "/\\/oauth2.*/", "")
+          })
+        }
+      ]
+
       command = [
-        "--provider=oidc",
-        "--client-id=${var.okta_client_id}",
-        "--client-secret=${var.okta_client_secret}",
-        "--oidc-issuer-url=${var.okta_issuer}",
-        "--cookie-secret=${random_password.oauth2_cookie_secret.result}",
-        "--email-domain=*",
-        "--upstream=http://127.0.0.1:8080",
-        "--http-address=0.0.0.0:4180",
-        "--skip-jwt-bearer-tokens=true",
-        "--extra-jwt-issuers=${var.okta_issuer}=${var.okta_client_id}"
+        "/bin/sh",
+        "-c",
+        "echo \"$ENVOY_CONFIG_YAML\" > /etc/envoy/envoy.yaml && envoy -c /etc/envoy/envoy.yaml"
       ]
 
       logConfiguration = {
@@ -142,7 +140,7 @@ resource "aws_ecs_service" "echo" {
 
   load_balancer {
     target_group_arn = aws_lb_target_group.api.arn
-    container_name   = "oauth2-proxy"
+    container_name   = "envoy"
     container_port   = 4180
   }
 
