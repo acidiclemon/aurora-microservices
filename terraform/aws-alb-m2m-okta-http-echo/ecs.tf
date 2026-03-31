@@ -96,7 +96,7 @@ resource "aws_ecs_task_definition" "echo" {
       command = [
         "/bin/sh",
         "-c",
-        "echo \"$ENVOY_CONFIG_YAML\" > /etc/envoy/envoy.yaml && envoy -c /etc/envoy/envoy.yaml"
+        "echo \"$ENVOY_CONFIG_YAML\" > /tmp/envoy.yaml && envoy -c /tmp/envoy.yaml"
       ]
 
       logConfiguration = {
