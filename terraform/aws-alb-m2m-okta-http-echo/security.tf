@@ -50,9 +50,17 @@ resource "aws_security_group" "ecs_tasks" {
 
   # Strict isolation: Allow inbound strictly on port 8080 and ONLY from the ALB SG
   ingress {
-    description     = "Allow inbound traffic from ALB exclusively"
+    description     = "Allow inbound HTTP traffic from ALB to Echo"
     from_port       = 8080
     to_port         = 8080
+    protocol        = "tcp"
+    security_groups = [aws_security_group.alb.id]
+  }
+
+  ingress {
+    description     = "Allow inbound API traffic from ALB to Envoy Sidecar"
+    from_port       = 4180
+    to_port         = 4180
     protocol        = "tcp"
     security_groups = [aws_security_group.alb.id]
   }
