@@ -37,6 +37,8 @@ static_resources:
                       seconds: 300
               rules:
               - match:
+                  path: "/ping"
+              - match:
                   prefix: "/"
                 requires:
                   provider_name: okta
