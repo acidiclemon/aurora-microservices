@@ -28,6 +28,11 @@ static_resources:
               providers:
                 okta:
                   issuer: "${okta_issuer}"
+                  claim_to_headers:
+                  - header_name: "x-okta-scope"
+                    claim_name: "scp"
+                  - header_name: "x-okta-client-id"
+                    claim_name: "cid"
                   remote_jwks:
                     http_uri:
                       uri: "${okta_issuer}/v1/keys"
