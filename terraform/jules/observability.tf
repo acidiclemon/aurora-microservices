@@ -220,7 +220,9 @@ resource "aws_iam_role_policy" "security_team_policy" {
           aws_s3_bucket.raw_logs.arn,
           "${aws_s3_bucket.raw_logs.arn}/*",
           aws_s3_bucket.audit_findings.arn,
-          "${aws_s3_bucket.audit_findings.arn}/*"
+          "${aws_s3_bucket.audit_findings.arn}/*",
+          aws_s3_bucket.flow_logs.arn,
+          "${aws_s3_bucket.flow_logs.arn}/*"
         ]
       },
       {
@@ -638,4 +640,92 @@ resource "aws_cloudwatch_log_subscription_filter" "microservices" {
   filter_pattern  = "" # All logs
   destination_arn = aws_kinesis_firehose_delivery_stream.logs_stream.arn
   role_arn        = aws_iam_role.logs_subscription_role.arn
+}
+
+# ------------------------------------------------------------------------------
+# VPC Flow Logs → S3 (F-PCI-06 — PCI DSS Req 10.2.1, HIPAA §164.312(b))
+# ------------------------------------------------------------------------------
+
+resource "aws_s3_bucket" "flow_logs" {
+  bucket        = "${var.project_name}-${terraform.workspace}-flow-logs"
+  force_destroy = true
+}
+
+resource "aws_s3_bucket_server_side_encryption_configuration" "flow_logs" {
+  bucket = aws_s3_bucket.flow_logs.id
+
+  rule {
+    apply_server_side_encryption_by_default {
+      kms_master_key_id = aws_kms_key.logs_key.arn
+      sse_algorithm     = "aws:kms"
+    }
+  }
+}
+
+resource "aws_s3_bucket_policy" "flow_logs" {
+  bucket = aws_s3_bucket.flow_logs.id
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      # Allow VPC Flow Logs delivery
+      {
+        Sid    = "AWSLogDeliveryWrite"
+        Effect = "Allow"
+        Principal = {
+          Service = "delivery.logs.amazonaws.com"
+        }
+        Action   = "s3:PutObject"
+        Resource = "${aws_s3_bucket.flow_logs.arn}/*"
+        Condition = {
+          StringEquals = {
+            "s3:x-amz-acl"      = "bucket-owner-full-control"
+            "aws:SourceAccount" = data.aws_caller_identity.current.account_id
+          }
+        }
+      },
+      {
+        Sid    = "AWSLogDeliveryAclCheck"
+        Effect = "Allow"
+        Principal = {
+          Service = "delivery.logs.amazonaws.com"
+        }
+        Action   = "s3:GetBucketAcl"
+        Resource = aws_s3_bucket.flow_logs.arn
+        Condition = {
+          StringEquals = {
+            "aws:SourceAccount" = data.aws_caller_identity.current.account_id
+          }
+        }
+      },
+      # Restrict read access to Security Team Role only
+      {
+        Sid       = "SecurityTeamRead"
+        Effect    = "Deny"
+        Principal = "*"
+        Action    = "s3:GetObject"
+        Resource  = "${aws_s3_bucket.flow_logs.arn}/*"
+        Condition = {
+          StringNotLike = {
+            "aws:PrincipalArn" = [
+              aws_iam_role.security_team_role.arn,
+              "${aws_iam_role.security_team_role.arn}/*"
+            ]
+          }
+        }
+      }
+    ]
+  })
+}
+
+resource "aws_flow_log" "vpc" {
+  vpc_id               = module.vpc.vpc_id
+  log_destination      = aws_s3_bucket.flow_logs.arn
+  log_destination_type = "s3"
+  traffic_type         = "ALL"
+
+  tags = {
+    Name        = "${var.project_name}-${terraform.workspace}-vpc-flow-logs"
+    Environment = terraform.workspace
+    Project     = var.project_name
+  }
 }

@@ -1002,6 +1002,12 @@ resource "null_resource" "ecs_pre_destroy" {
     aws_wafv2_web_acl_logging_configuration.cloudfront,
     aws_cloudwatch_log_group.waf,
     aws_kms_key.waf_logs,
-    aws_kms_alias.waf_logs
+    aws_kms_alias.waf_logs,
+
+    # VPC Flow Logs
+    aws_s3_bucket.flow_logs,
+    aws_s3_bucket_server_side_encryption_configuration.flow_logs,
+    aws_s3_bucket_policy.flow_logs,
+    aws_flow_log.vpc
   ]
 }
