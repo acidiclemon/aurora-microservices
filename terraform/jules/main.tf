@@ -27,7 +27,7 @@ locals {
     cartservice = {
       port = 7070
       env = [
-        { name = "REDIS_ADDR", value = "${module.redis.cluster_cache_nodes[0].address}:${module.redis.cluster_cache_nodes[0].port}" }
+        { name = "REDIS_ADDR", value = "${module.redis.replication_group_primary_endpoint_address}:6379" }
       ]
     }
     checkoutservice = {
@@ -687,17 +687,26 @@ module "redis" {
   source  = "terraform-aws-modules/elasticache/aws"
   version = "~> 1.2"
 
-  cluster_id               = "${var.project_name}-${terraform.workspace}-redis"
-  create_cluster           = true
-  create_replication_group = false
+  replication_group_id     = "${var.project_name}-${terraform.workspace}-redis"
+  description              = "Redis for ${var.project_name}-${terraform.workspace} (encrypted)"
+  create_cluster           = false
+  create_replication_group = true
   subnet_group_name        = "${var.project_name}-${terraform.workspace}-redis-subnet-group"
   create_security_group    = false
 
-  engine          = "redis"
-  node_type       = "cache.t3.micro"
-  num_cache_nodes = 1
-  engine_version  = "7.0"
-  port            = 6379
+  engine            = "redis"
+  node_type         = "cache.t3.micro"
+  num_cache_clusters = 1
+  engine_version    = "7.0"
+  port              = 6379
+
+  # Encryption at rest (F-PCI-01 / F-HIPAA-01)
+  at_rest_encryption_enabled = true
+  kms_key_arn                = aws_kms_key.redis.arn
+
+  # Encryption in transit (F-PCI-02 / F-HIPAA-01)
+  transit_encryption_enabled = true
+  transit_encryption_mode    = "required"
 
   subnet_ids         = module.vpc.private_subnets
   vpc_id             = module.vpc.vpc_id
@@ -933,6 +942,8 @@ resource "null_resource" "ecs_pre_destroy" {
     aws_iam_role_policy_attachment.ecs_sc_tls_infra,
     aws_kms_key.service_connect_tls,
     aws_kms_alias.service_connect_tls,
+    aws_kms_key.redis,
+    aws_kms_alias.redis,
 
     # Observability - Logs & Metrics
     aws_cloudwatch_log_group.frontend,
