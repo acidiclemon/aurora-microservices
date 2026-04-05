@@ -1000,6 +1000,8 @@ resource "null_resource" "ecs_pre_destroy" {
     # WAF
     aws_wafv2_web_acl.cloudfront,
     aws_wafv2_web_acl_logging_configuration.cloudfront,
-    aws_cloudwatch_log_group.waf
+    aws_cloudwatch_log_group.waf,
+    aws_kms_key.waf_logs,
+    aws_kms_alias.waf_logs
   ]
 }

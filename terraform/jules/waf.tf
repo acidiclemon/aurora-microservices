@@ -126,6 +126,60 @@ resource "aws_wafv2_web_acl" "cloudfront" {
 }
 
 ################################################################################
+# KMS Key for WAF Logs (us-east-1)
+################################################################################
+
+resource "aws_kms_key" "waf_logs" {
+  provider = aws.us_east_1
+
+  description             = "KMS key for ${var.project_name}-${terraform.workspace} WAF logs"
+  deletion_window_in_days = 7
+  enable_key_rotation     = true
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Sid    = "Enable IAM User Permissions"
+        Effect = "Allow"
+        Principal = {
+          AWS = "arn:aws:iam::${data.aws_caller_identity.current.account_id}:root"
+        }
+        Action   = "kms:*"
+        Resource = "*"
+      },
+      {
+        Sid    = "Allow CloudWatch Logs"
+        Effect = "Allow"
+        Principal = {
+          Service = "logs.us-east-1.amazonaws.com"
+        }
+        Action = [
+          "kms:Encrypt",
+          "kms:Decrypt",
+          "kms:ReEncrypt*",
+          "kms:GenerateDataKey*",
+          "kms:DescribeKey"
+        ]
+        Resource = "*"
+        Condition = {
+          ArnLike = {
+            "kms:EncryptionContext:aws:logs:arn" = "arn:aws:logs:us-east-1:${data.aws_caller_identity.current.account_id}:*"
+          }
+        }
+      }
+    ]
+  })
+}
+
+resource "aws_kms_alias" "waf_logs" {
+  provider = aws.us_east_1
+
+  name          = "alias/${var.project_name}-${terraform.workspace}-waf-logs-key"
+  target_key_id = aws_kms_key.waf_logs.key_id
+}
+
+################################################################################
 # WAF Logging — CloudWatch Log Group (us-east-1)
 ################################################################################
 
@@ -135,6 +189,7 @@ resource "aws_cloudwatch_log_group" "waf" {
   # WAF logging requires the log group name to start with "aws-waf-logs-"
   name              = "aws-waf-logs-${var.project_name}-${terraform.workspace}"
   retention_in_days = 30
+  kms_key_id        = aws_kms_key.waf_logs.arn
 }
 
 resource "aws_wafv2_web_acl_logging_configuration" "cloudfront" {
