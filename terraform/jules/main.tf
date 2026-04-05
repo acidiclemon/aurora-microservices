@@ -788,7 +788,8 @@ resource "aws_cloudfront_distribution" "this" {
 
   default_cache_behavior {
     target_origin_id       = "alb"
-    viewer_protocol_policy = "allow-all"
+    # Redirect HTTP → HTTPS (F-PCI-03 / F-HIPAA-03 — PCI DSS Req 4.2.1)
+    viewer_protocol_policy = "redirect-to-https"
 
     allowed_methods = ["GET", "HEAD", "OPTIONS", "PUT", "POST", "PATCH", "DELETE"]
     cached_methods  = ["GET", "HEAD"]
