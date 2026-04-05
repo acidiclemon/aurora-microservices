@@ -779,6 +779,7 @@ resource "aws_cloudfront_distribution" "this" {
   price_class         = "PriceClass_100"
   retain_on_delete    = false
   wait_for_deployment = false
+  web_acl_id          = aws_wafv2_web_acl.cloudfront.arn
 
   aliases = var.domain_name != "" ? ["${var.project_name}-${terraform.workspace}.${var.domain_name}"] : []
 
@@ -994,6 +995,11 @@ resource "null_resource" "ecs_pre_destroy" {
     aws_iam_role_policy.canary_policy,
     aws_synthetics_canary.home,
     aws_synthetics_canary.product,
-    aws_synthetics_canary.cart
+    aws_synthetics_canary.cart,
+
+    # WAF
+    aws_wafv2_web_acl.cloudfront,
+    aws_wafv2_web_acl_logging_configuration.cloudfront,
+    aws_cloudwatch_log_group.waf
   ]
 }
