@@ -7,6 +7,13 @@ resource "aws_s3_bucket" "cloudtrail" {
   force_destroy = true
 }
 
+resource "aws_s3_bucket_versioning" "cloudtrail" {
+  bucket = aws_s3_bucket.cloudtrail.id
+  versioning_configuration {
+    status = "Enabled"
+  }
+}
+
 resource "aws_s3_bucket_server_side_encryption_configuration" "cloudtrail" {
   bucket = aws_s3_bucket.cloudtrail.id
 

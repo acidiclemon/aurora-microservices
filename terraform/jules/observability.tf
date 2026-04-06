@@ -406,6 +406,13 @@ resource "aws_s3_bucket" "raw_logs" {
   force_destroy = true
 }
 
+resource "aws_s3_bucket_versioning" "raw_logs" {
+  bucket = aws_s3_bucket.raw_logs.id
+  versioning_configuration {
+    status = "Enabled"
+  }
+}
+
 resource "aws_s3_bucket_server_side_encryption_configuration" "raw_logs" {
   bucket = aws_s3_bucket.raw_logs.id
 
@@ -456,6 +463,13 @@ resource "aws_s3_bucket_policy" "raw_logs" {
 resource "aws_s3_bucket" "audit_findings" {
   bucket        = "${var.project_name}-${terraform.workspace}-audit-findings"
   force_destroy = true
+}
+
+resource "aws_s3_bucket_versioning" "audit_findings" {
+  bucket = aws_s3_bucket.audit_findings.id
+  versioning_configuration {
+    status = "Enabled"
+  }
 }
 
 resource "aws_s3_bucket_server_side_encryption_configuration" "audit_findings" {
@@ -740,6 +754,13 @@ resource "aws_cloudwatch_log_subscription_filter" "microservices" {
 resource "aws_s3_bucket" "flow_logs" {
   bucket        = "${var.project_name}-${terraform.workspace}-flow-logs"
   force_destroy = true
+}
+
+resource "aws_s3_bucket_versioning" "flow_logs" {
+  bucket = aws_s3_bucket.flow_logs.id
+  versioning_configuration {
+    status = "Enabled"
+  }
 }
 
 resource "aws_s3_bucket_server_side_encryption_configuration" "flow_logs" {
