@@ -76,6 +76,8 @@ resource "aws_cloudwatch_log_group" "cloudtrail" {
   name              = "/aws/cloudtrail/${var.project_name}-${terraform.workspace}"
   retention_in_days = 30
   kms_key_id        = aws_kms_key.regulated_data_key.arn
+
+  depends_on = [aws_kms_key_policy.regulated_data_key]
 }
 
 resource "aws_iam_role" "cloudtrail_cloudwatch" {

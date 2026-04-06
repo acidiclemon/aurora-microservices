@@ -20,6 +20,8 @@ resource "aws_cloudwatch_log_group" "frontend" {
   name              = "/aws/ecs/${var.project_name}-${terraform.workspace}-frontend"
   retention_in_days = 30
   kms_key_id        = aws_kms_key.logs_key.arn
+
+  depends_on = [aws_kms_key_policy.logs_key]
 }
 
 resource "aws_cloudwatch_log_group" "microservices" {
@@ -28,6 +30,8 @@ resource "aws_cloudwatch_log_group" "microservices" {
   name              = "/aws/ecs/${var.project_name}-${terraform.workspace}-${each.key}"
   retention_in_days = 30
   kms_key_id        = aws_kms_key.logs_key.arn
+
+  depends_on = [aws_kms_key_policy.logs_key]
 }
 
 # ------------------------------------------------------------------------------
