@@ -969,6 +969,9 @@ resource "null_resource" "ecs_pre_destroy" {
     aws_kms_key.logs_key,
     aws_kms_alias.logs_key,
     aws_kms_key_policy.logs_key,
+    aws_kms_key.regulated_data_key,
+    aws_kms_alias.regulated_data_key,
+    aws_kms_key_policy.regulated_data_key,
 
     # Observability - S3 & Firehose
     aws_s3_bucket.raw_logs,

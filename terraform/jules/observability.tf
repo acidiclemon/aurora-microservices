@@ -228,12 +228,22 @@ resource "aws_iam_role_policy" "security_team_policy" {
         ]
       },
       {
+        Sid    = "DecryptOperationalLogs"
         Effect = "Allow"
         Action = [
           "kms:Decrypt",
           "kms:GenerateDataKey"
         ]
         Resource = aws_kms_key.logs_key.arn
+      },
+      {
+        Sid    = "DecryptRegulatedData"
+        Effect = "Allow"
+        Action = [
+          "kms:Decrypt",
+          "kms:GenerateDataKey"
+        ]
+        Resource = aws_kms_key.regulated_data_key.arn
       }
     ]
   })
@@ -287,6 +297,61 @@ resource "aws_kms_key_policy" "logs_key" {
             "kms:EncryptionContext:aws:logs:arn" : "arn:aws:logs:${var.region}:${data.aws_caller_identity.current.account_id}:*"
           }
         }
+      }
+    ]
+  })
+}
+
+# ------------------------------------------------------------------------------
+# KMS Key for Regulated Data (unmasked PII/PHI/PAN)
+# Separated from logs_key to enforce data classification boundaries.
+# Used by: raw_logs bucket, audit_findings bucket
+# ------------------------------------------------------------------------------
+
+resource "aws_kms_key" "regulated_data_key" {
+  description             = "KMS key for ${var.project_name}-${terraform.workspace} regulated data (unmasked PII/PHI/PAN)"
+  deletion_window_in_days = 7
+  enable_key_rotation     = true
+}
+
+resource "aws_kms_alias" "regulated_data_key" {
+  name          = "alias/${var.project_name}-${terraform.workspace}-regulated-data-key"
+  target_key_id = aws_kms_key.regulated_data_key.key_id
+}
+
+resource "aws_kms_key_policy" "regulated_data_key" {
+  key_id = aws_kms_key.regulated_data_key.id
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Sid    = "Enable IAM User Permissions"
+        Effect = "Allow"
+        Principal = {
+          AWS = "arn:aws:iam::${data.aws_caller_identity.current.account_id}:root"
+        }
+        Action   = "kms:*"
+        Resource = "*"
+      },
+      {
+        Sid    = "Allow CloudWatch Logs for Audit Findings"
+        Effect = "Allow"
+        Principal = {
+          Service = "logs.${var.region}.amazonaws.com"
+        }
+        Action = [
+          "kms:Encrypt",
+          "kms:Decrypt",
+          "kms:ReEncrypt*",
+          "kms:GenerateDataKey*",
+          "kms:DescribeKey"
+        ]
+        Resource = "*"
+        Condition = {
+          ArnLike = {
+            "kms:EncryptionContext:aws:logs:arn" = "arn:aws:logs:${var.region}:${data.aws_caller_identity.current.account_id}:*"
+          }
+        }
       },
       {
         Sid    = "Allow Kinesis Firehose"
@@ -322,7 +387,7 @@ resource "aws_s3_bucket_server_side_encryption_configuration" "raw_logs" {
 
   rule {
     apply_server_side_encryption_by_default {
-      kms_master_key_id = aws_kms_key.logs_key.arn
+      kms_master_key_id = aws_kms_key.regulated_data_key.arn
       sse_algorithm     = "aws:kms"
     }
   }
@@ -374,7 +439,7 @@ resource "aws_s3_bucket_server_side_encryption_configuration" "audit_findings" {
 
   rule {
     apply_server_side_encryption_by_default {
-      kms_master_key_id = aws_kms_key.logs_key.arn
+      kms_master_key_id = aws_kms_key.regulated_data_key.arn
       sse_algorithm     = "aws:kms"
     }
   }
@@ -564,7 +629,7 @@ resource "aws_iam_role_policy" "firehose_policy" {
           "kms:Decrypt",
           "kms:GenerateDataKey"
         ]
-        Resource = aws_kms_key.logs_key.arn
+        Resource = aws_kms_key.regulated_data_key.arn
       }
     ]
   })
