@@ -211,35 +211,35 @@ module "alb" {
   enable_deletion_protection = false
   create_security_group = false
 
-  # When domain is set: HTTP redirects to HTTPS, HTTPS forwards to target group
-  # When no domain:     HTTP forwards directly (F-PCI-04 — PCI DSS Req 4.2.1)
-  listeners = var.domain_name != "" ? {
-    http = {
-      port     = 80
-      protocol = "HTTP"
-      redirect = {
-        port        = "443"
-        protocol    = "HTTPS"
-        status_code = "HTTP_301"
-      }
-    }
-    https = {
-      port            = 443
-      protocol        = "HTTPS"
-      ssl_policy      = "ELBSecurityPolicy-TLS13-1-2-2021-06"
-      certificate_arn = aws_acm_certificate_validation.alb[0].certificate_arn
-      forward = {
-        target_group_key = "frontend"
-      }
-    }
-  } : {
-    http = {
-      port     = 80
-      protocol = "HTTP"
-      forward = {
-        target_group_key = "frontend"
-      }
-    }
+  # Dynamically construct listeners to avoid strict Terraform conditional type mismatches
+  listeners = {
+    for k, v in {
+      http_redirect = var.domain_name != "" ? {
+        port     = 80
+        protocol = "HTTP"
+        redirect = {
+          port        = "443"
+          protocol    = "HTTPS"
+          status_code = "HTTP_301"
+        }
+      } : null
+      http_forward = var.domain_name == "" ? {
+        port     = 80
+        protocol = "HTTP"
+        forward = {
+          target_group_key = "frontend"
+        }
+      } : null
+      https = var.domain_name != "" ? {
+        port            = 443
+        protocol        = "HTTPS"
+        ssl_policy      = "ELBSecurityPolicy-TLS13-1-2-2021-06"
+        certificate_arn = aws_acm_certificate_validation.alb[0].certificate_arn
+        forward = {
+          target_group_key = "frontend"
+        }
+      } : null
+    } : k => v if v != null
   }
 
   target_groups = {
