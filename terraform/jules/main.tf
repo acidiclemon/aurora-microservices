@@ -1011,6 +1011,15 @@ resource "null_resource" "ecs_pre_destroy" {
     aws_s3_bucket.flow_logs,
     aws_s3_bucket_server_side_encryption_configuration.flow_logs,
     aws_s3_bucket_policy.flow_logs,
-    aws_flow_log.vpc
+    aws_flow_log.vpc,
+
+    # CloudTrail
+    aws_s3_bucket.cloudtrail,
+    aws_s3_bucket_server_side_encryption_configuration.cloudtrail,
+    aws_s3_bucket_policy.cloudtrail,
+    aws_cloudwatch_log_group.cloudtrail,
+    aws_iam_role.cloudtrail_cloudwatch,
+    aws_iam_role_policy.cloudtrail_cloudwatch,
+    aws_cloudtrail.main
   ]
 }

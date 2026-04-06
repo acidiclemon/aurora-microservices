@@ -224,7 +224,9 @@ resource "aws_iam_role_policy" "security_team_policy" {
           aws_s3_bucket.audit_findings.arn,
           "${aws_s3_bucket.audit_findings.arn}/*",
           aws_s3_bucket.flow_logs.arn,
-          "${aws_s3_bucket.flow_logs.arn}/*"
+          "${aws_s3_bucket.flow_logs.arn}/*",
+          aws_s3_bucket.cloudtrail.arn,
+          "${aws_s3_bucket.cloudtrail.arn}/*"
         ]
       },
       {
@@ -367,6 +369,24 @@ resource "aws_kms_key_policy" "regulated_data_key" {
           "kms:DescribeKey"
         ]
         Resource = "*"
+      },
+      {
+        Sid    = "Allow CloudTrail to encrypt logs"
+        Effect = "Allow"
+        Principal = {
+          Service = "cloudtrail.amazonaws.com"
+        }
+        Action = [
+          "kms:GenerateDataKey*",
+          "kms:Decrypt",
+          "kms:DescribeKey"
+        ]
+        Resource = "*"
+        Condition = {
+          StringLike = {
+            "kms:EncryptionContext:aws:cloudtrail:arn" = "arn:aws:cloudtrail:*:${data.aws_caller_identity.current.account_id}:trail/*"
+          }
+        }
       }
     ]
   })
