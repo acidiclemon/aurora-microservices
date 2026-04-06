@@ -27,7 +27,7 @@ locals {
     cartservice = {
       port = 7070
       env = [
-        { name = "REDIS_ADDR", value = "${module.redis.replication_group_primary_endpoint_address}:6379" }
+        { name = "REDIS_ADDR", value = "${module.redis.replication_group_primary_endpoint_address}:6379,ssl=True,abortConnect=False" }
       ]
     }
     checkoutservice = {
