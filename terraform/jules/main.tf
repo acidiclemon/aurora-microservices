@@ -995,6 +995,7 @@ resource "null_resource" "ecs_pre_destroy" {
 
     # Canaries
     aws_s3_bucket.canary_artifacts,
+    aws_s3_bucket_server_side_encryption_configuration.canary_artifacts,
     aws_s3_bucket_lifecycle_configuration.canary_artifacts,
     aws_iam_role.canary_role,
     aws_iam_role_policy.canary_policy,
