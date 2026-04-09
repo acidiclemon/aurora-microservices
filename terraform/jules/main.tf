@@ -135,15 +135,21 @@ module "ecs_sg" {
 
   computed_ingress_with_source_security_group_id = [
     {
-      rule                     = "all-all"
+      from_port                = 8080
+      to_port                  = 8080
+      protocol                 = "tcp"
       source_security_group_id = module.alb_sg.security_group_id
+      description              = "Allow ALB to frontend"
     }
   ]
   number_of_computed_ingress_with_source_security_group_id = 1
 
   ingress_with_self = [
-    {
-      rule = "all-all"
+    for p in [3550, 5050, 7000, 7070, 8080, 9555, 50051] : {
+      from_port   = p
+      to_port     = p
+      protocol    = "tcp"
+      description = "Internal microservice port"
     }
   ]
   
