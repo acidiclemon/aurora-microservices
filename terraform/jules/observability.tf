@@ -677,6 +677,12 @@ resource "aws_kinesis_firehose_delivery_stream" "logs_stream" {
   name        = "${var.project_name}-${terraform.workspace}-logs-stream"
   destination = "extended_s3"
 
+  server_side_encryption {
+    enabled  = true
+    key_type = "CUSTOMER_MANAGED_CMK"
+    key_arn  = aws_kms_key.regulated_data_key.arn
+  }
+
   extended_s3_configuration {
     role_arn   = aws_iam_role.firehose_role.arn
     bucket_arn = aws_s3_bucket.raw_logs.arn
