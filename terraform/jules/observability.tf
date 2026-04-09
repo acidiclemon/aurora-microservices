@@ -745,7 +745,13 @@ resource "aws_iam_role_policy" "logs_subscription_policy" {
       {
         Effect = "Allow"
         Action = "logs:Unmask"
-        Resource = "*"
+        Resource = concat(
+          [
+            "${aws_cloudwatch_log_group.frontend.arn}:*",
+            "${aws_cloudwatch_log_group.collector.arn}:*"
+          ],
+          [for g in aws_cloudwatch_log_group.microservices : "${g.arn}:*"]
+        )
       }
     ]
   })
