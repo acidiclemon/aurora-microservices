@@ -115,7 +115,14 @@ module "alb_sg" {
 
   ingress_cidr_blocks = ["0.0.0.0/0"]
   ingress_rules       = ["http-80-tcp", "https-443-tcp"]
-  egress_rules        = ["all-all"]
+  
+  computed_egress_with_source_security_group_id = [
+    {
+      rule                     = "all-all"
+      source_security_group_id = module.ecs_sg.security_group_id
+    }
+  ]
+  number_of_computed_egress_with_source_security_group_id = 1
 }
 
 module "ecs_sg" {
@@ -139,7 +146,24 @@ module "ecs_sg" {
       rule = "all-all"
     }
   ]
-  egress_rules = ["all-all"]
+  
+  egress_rules = ["https-443-tcp"]
+  
+  egress_with_self = [
+    {
+      rule = "all-all"
+    }
+  ]
+  
+  computed_egress_with_source_security_group_id = [
+    {
+      from_port                = 6379
+      to_port                  = 6379
+      protocol                 = "tcp"
+      source_security_group_id = module.redis_sg.security_group_id
+    }
+  ]
+  number_of_computed_egress_with_source_security_group_id = 1
 }
 
 module "redis_sg" {
@@ -159,8 +183,6 @@ module "redis_sg" {
     }
   ]
   number_of_computed_ingress_with_source_security_group_id = 1
-
-  egress_rules = ["all-all"]
 }
 
 ################################################################################
