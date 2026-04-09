@@ -1022,6 +1022,7 @@ resource "null_resource" "ecs_pre_destroy" {
     aws_iam_role_policy.logs_subscription_policy,
     aws_cloudwatch_log_subscription_filter.frontend,
     aws_cloudwatch_log_subscription_filter.microservices,
+    aws_cloudwatch_log_subscription_filter.collector,
 
     # Canaries
     aws_s3_bucket.canary_artifacts,

@@ -769,6 +769,14 @@ resource "aws_cloudwatch_log_subscription_filter" "microservices" {
   role_arn        = aws_iam_role.logs_subscription_role.arn
 }
 
+resource "aws_cloudwatch_log_subscription_filter" "collector" {
+  name            = "${var.project_name}-${terraform.workspace}-collector-to-s3"
+  log_group_name  = aws_cloudwatch_log_group.collector.name
+  filter_pattern  = "" # All logs
+  destination_arn = aws_kinesis_firehose_delivery_stream.logs_stream.arn
+  role_arn        = aws_iam_role.logs_subscription_role.arn
+}
+
 # ------------------------------------------------------------------------------
 # VPC Flow Logs → S3 (F-PCI-06 — PCI DSS Req 10.2.1, HIPAA §164.312(b))
 # ------------------------------------------------------------------------------
