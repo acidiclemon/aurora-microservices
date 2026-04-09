@@ -413,6 +413,14 @@ resource "aws_s3_bucket_versioning" "raw_logs" {
   }
 }
 
+resource "aws_s3_bucket_public_access_block" "raw_logs" {
+  bucket                  = aws_s3_bucket.raw_logs.id
+  block_public_acls       = true
+  block_public_policy     = true
+  ignore_public_acls      = true
+  restrict_public_buckets = true
+}
+
 resource "aws_s3_bucket_server_side_encryption_configuration" "raw_logs" {
   bucket = aws_s3_bucket.raw_logs.id
 
@@ -470,6 +478,14 @@ resource "aws_s3_bucket_versioning" "audit_findings" {
   versioning_configuration {
     status = "Enabled"
   }
+}
+
+resource "aws_s3_bucket_public_access_block" "audit_findings" {
+  bucket                  = aws_s3_bucket.audit_findings.id
+  block_public_acls       = true
+  block_public_policy     = true
+  ignore_public_acls      = true
+  restrict_public_buckets = true
 }
 
 resource "aws_s3_bucket_server_side_encryption_configuration" "audit_findings" {
@@ -767,6 +783,14 @@ resource "aws_s3_bucket_versioning" "flow_logs" {
   versioning_configuration {
     status = "Enabled"
   }
+}
+
+resource "aws_s3_bucket_public_access_block" "flow_logs" {
+  bucket                  = aws_s3_bucket.flow_logs.id
+  block_public_acls       = true
+  block_public_policy     = true
+  ignore_public_acls      = true
+  restrict_public_buckets = true
 }
 
 resource "aws_s3_bucket_server_side_encryption_configuration" "flow_logs" {

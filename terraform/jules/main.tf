@@ -1004,10 +1004,12 @@ resource "null_resource" "ecs_pre_destroy" {
     # Observability - S3 & Firehose
     aws_s3_bucket.raw_logs,
     aws_s3_bucket_versioning.raw_logs,
+    aws_s3_bucket_public_access_block.raw_logs,
     aws_s3_bucket_server_side_encryption_configuration.raw_logs,
     aws_s3_bucket_policy.raw_logs,
     aws_s3_bucket.audit_findings,
     aws_s3_bucket_versioning.audit_findings,
+    aws_s3_bucket_public_access_block.audit_findings,
     aws_s3_bucket_server_side_encryption_configuration.audit_findings,
     aws_s3_bucket_policy.audit_findings,
     aws_cloudwatch_log_data_protection_policy.frontend,
@@ -1024,6 +1026,7 @@ resource "null_resource" "ecs_pre_destroy" {
     # Canaries
     aws_s3_bucket.canary_artifacts,
     aws_s3_bucket_server_side_encryption_configuration.canary_artifacts,
+    aws_s3_bucket_public_access_block.canary_artifacts,
     aws_s3_bucket_lifecycle_configuration.canary_artifacts,
     aws_iam_role.canary_role,
     aws_iam_role_policy.canary_policy,
@@ -1041,6 +1044,7 @@ resource "null_resource" "ecs_pre_destroy" {
     # VPC Flow Logs
     aws_s3_bucket.flow_logs,
     aws_s3_bucket_versioning.flow_logs,
+    aws_s3_bucket_public_access_block.flow_logs,
     aws_s3_bucket_server_side_encryption_configuration.flow_logs,
     aws_s3_bucket_policy.flow_logs,
     aws_flow_log.vpc,
@@ -1048,6 +1052,7 @@ resource "null_resource" "ecs_pre_destroy" {
     # CloudTrail
     aws_s3_bucket.cloudtrail,
     aws_s3_bucket_versioning.cloudtrail,
+    aws_s3_bucket_public_access_block.cloudtrail,
     aws_s3_bucket_server_side_encryption_configuration.cloudtrail,
     aws_s3_bucket_policy.cloudtrail,
     aws_cloudwatch_log_group.cloudtrail,
