@@ -763,6 +763,8 @@ resource "aws_cloudwatch_log_subscription_filter" "frontend" {
   filter_pattern  = "" # All logs
   destination_arn = aws_kinesis_firehose_delivery_stream.logs_stream.arn
   role_arn        = aws_iam_role.logs_subscription_role.arn
+
+  depends_on = [aws_iam_role_policy.logs_subscription_policy]
 }
 
 resource "aws_cloudwatch_log_subscription_filter" "microservices" {
@@ -773,6 +775,8 @@ resource "aws_cloudwatch_log_subscription_filter" "microservices" {
   filter_pattern  = "" # All logs
   destination_arn = aws_kinesis_firehose_delivery_stream.logs_stream.arn
   role_arn        = aws_iam_role.logs_subscription_role.arn
+
+  depends_on = [aws_iam_role_policy.logs_subscription_policy]
 }
 
 resource "aws_cloudwatch_log_subscription_filter" "collector" {
@@ -781,6 +785,8 @@ resource "aws_cloudwatch_log_subscription_filter" "collector" {
   filter_pattern  = "" # All logs
   destination_arn = aws_kinesis_firehose_delivery_stream.logs_stream.arn
   role_arn        = aws_iam_role.logs_subscription_role.arn
+
+  depends_on = [aws_iam_role_policy.logs_subscription_policy]
 }
 
 # ------------------------------------------------------------------------------
