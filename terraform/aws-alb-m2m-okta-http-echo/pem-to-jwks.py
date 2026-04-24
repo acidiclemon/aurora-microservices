@@ -29,15 +29,13 @@ try:
     # Okta strictly requires a Key ID (kid) to uniquely identify the key
     jwk_dict["kid"] = "my-api-key-1"
     
-    # Okta specifically requires a JWK "Set" (JWKS) with a keys array containing the object
-    jwks = {
-        "keys": [jwk_dict]
-    }
+    # Okta's manual paste UI strictly expects the bare JWK object, NOT a JWKS array!
+    # So we print the single jwk_dict directly.
     
-    print("\n✅ Successfully converted PEM to JWKS format!")
+    print("\n✅ Successfully converted PEM to JWK format!")
     print("Copy the entire JSON block below and paste it into Okta:\n")
     print("--------------------------------------------------")
-    print(json.dumps(jwks, indent=2))
+    print(json.dumps(jwk_dict, indent=2))
     print("--------------------------------------------------\n")
     
 except FileNotFoundError:
