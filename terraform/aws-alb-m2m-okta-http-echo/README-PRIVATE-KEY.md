@@ -25,11 +25,16 @@ openssl rsa -in private.pem -pubout -out public.pem
 ```
 
 ## Step 3: Configure Okta
+> [!WARNING]  
+> **DO NOT** change the authentication method on your existing Okta Web Application that the AWS ALB uses! The AWS ALB natively requires a `client_secret` for the UI login flow and does not support Private Keys. You must create a *second*, dedicated App in Okta for this machine flow.
+
 1. Log into your Okta Admin Console.
-2. Go to your API Services Application.
-3. In the **General** tab, under "Client Credentials", change the authentication method to **Public Key / Private Key**.
-4. Click **Add Key** and upload the `public.pem` file you just generated.
-5. Save your changes.
+2. Go to **Applications** -> **Applications** and click **Create App Integration**.
+3. Select **API Services** (this is for Machine-to-Machine) and click Next. Name it something like "Echo Private Key API Client".
+4. Once created, go to the **General** tab of your new App.
+5. Under "Client Credentials", change the authentication method to **Public Key / Private Key**.
+6. Click **Add Key** and upload the `public.pem` file you just generated.
+7. Save your changes, and copy the new **Client ID** for this specific App.
 
 ## Step 4: Run the Script
 1. Open the `okta-private-key-auth.py` script provided in this directory.
