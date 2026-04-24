@@ -22,12 +22,16 @@ try:
         backend=default_backend()
     )
     
-    # Convert to JSON Web Key (JWK)
-    jwk = jwt.algorithms.RSAAlgorithm.to_jwk(public_key)
+    # PyJWT's to_jwk returns a JSON string, so we must parse it into a dict
+    jwk_json_str = jwt.algorithms.RSAAlgorithm.to_jwk(public_key)
+    jwk_dict = json.loads(jwk_json_str)
     
-    # Okta specifically requires a JWK "Set" (JWKS) with a keys array
+    # Okta strictly requires a Key ID (kid) to uniquely identify the key
+    jwk_dict["kid"] = "my-api-key-1"
+    
+    # Okta specifically requires a JWK "Set" (JWKS) with a keys array containing the object
     jwks = {
-        "keys": [jwk]
+        "keys": [jwk_dict]
     }
     
     print("\n✅ Successfully converted PEM to JWKS format!")
