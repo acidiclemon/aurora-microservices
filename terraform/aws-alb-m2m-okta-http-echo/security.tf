@@ -1,37 +1,43 @@
+# =============================================================================
+# security.tf  —  Security Groups
+#
+# Topology:
+#   ALB SG          → accepts 443 from internet; egresses to VPC only
+#   ECS Tasks SG    → accepts 8080/4180 from ALB; egresses to VPC Endpoints
+#                     and the envoy-gateway on port 3128
+#   Envoy Gateway SG → accepts 3128 from ECS Tasks; egresses to 0.0.0.0/0:443
+#   VPC Endpoints SG → declared in network.tf (shared by all endpoints)
+#
+# Cross-SG references between ecs_tasks ↔ envoy_gateway would create a
+# Terraform dependency cycle if inline rules are used.  The cross-referencing
+# ingress/egress rules are therefore declared as separate
+# aws_security_group_rule resources below (after both SGs exist).
+# =============================================================================
+
 # -----------------------------------------------------------------------------
 # ALB Security Group
 # -----------------------------------------------------------------------------
 
 resource "aws_security_group" "alb" {
   name        = "${var.project_name}-alb-sg"
-  description = "Security group for Internet-facing ALB"
+  description = "Internet-facing ALB: accept HTTPS, egress to VPC only"
   vpc_id      = aws_vpc.main.id
 
-  # Allow inbound HTTPS strictly
   ingress {
-    description = "Allow HTTPS inbound"
+    description = "HTTPS from internet"
     from_port   = 443
     to_port     = 443
     protocol    = "tcp"
     cidr_blocks = ["0.0.0.0/0"]
   }
 
-  # Allow outbound to VPC (to reach ECS Tasks)
+  # Egress restricted to VPC CIDR so ALB can only reach ECS tasks
   egress {
-    description = "Allow all outbound traffic to VPC"
+    description = "Egress to VPC (reaches ECS tasks)"
     from_port   = 0
     to_port     = 0
     protocol    = "-1"
     cidr_blocks = [var.vpc_cidr]
-  }
-
-  # Allow outbound HTTPS to the internet (required for OIDC token exchange with Okta)
-  egress {
-    description = "Allow HTTPS outbound to Okta for OIDC token exchange"
-    from_port   = 443
-    to_port     = 443
-    protocol    = "tcp"
-    cidr_blocks = ["0.0.0.0/0"]
   }
 
   tags = {
@@ -40,41 +46,110 @@ resource "aws_security_group" "alb" {
 }
 
 # -----------------------------------------------------------------------------
-# ECS Task Security Group
+# ECS Tasks Security Group  (main task: http-echo + envoy sidecar)
 # -----------------------------------------------------------------------------
+# Inbound-only rules are declared inline (no cycle risk).
+# The egress rule toward envoy_gateway is declared as a separate rule below.
 
 resource "aws_security_group" "ecs_tasks" {
   name        = "${var.project_name}-ecs-tasks-sg"
-  description = "Security group for ECS tasks running the echo server"
+  description = "Main ECS task (air-gapped): inbound from ALB, egress to VPCE and envoy-gateway only"
   vpc_id      = aws_vpc.main.id
 
-  # Strict isolation: Allow inbound strictly on port 8080 and ONLY from the ALB SG
+  # Inbound: HTTP echo on 8080 from ALB
   ingress {
-    description     = "Allow inbound HTTP traffic from ALB to Echo"
+    description     = "HTTP echo from ALB"
     from_port       = 8080
     to_port         = 8080
     protocol        = "tcp"
     security_groups = [aws_security_group.alb.id]
   }
 
+  # Inbound: Envoy M2M proxy on 4180 from ALB
   ingress {
-    description     = "Allow inbound API traffic from ALB to Envoy Sidecar"
+    description     = "Envoy M2M proxy from ALB"
     from_port       = 4180
     to_port         = 4180
     protocol        = "tcp"
     security_groups = [aws_security_group.alb.id]
   }
 
-  # Allow outbound so tasks can reach NAT gateway (to pull images, external APIs)
+  # Egress: HTTPS to VPC Endpoints (ECR, ECS, CloudWatch, SSM)
   egress {
-    description = "Allow all outbound traffic"
-    from_port   = 0
-    to_port     = 0
-    protocol    = "-1"
-    cidr_blocks = ["0.0.0.0/0"]
+    description     = "HTTPS to VPC Endpoints (AWS APIs)"
+    from_port       = 443
+    to_port         = 443
+    protocol        = "tcp"
+    security_groups = [aws_security_group.vpc_endpoints.id]
   }
+
+  # NOTE: the egress rule to envoy_gateway (port 3128) is declared separately
+  # below to avoid a circular dependency between the two SGs.
 
   tags = {
     Name = "${var.project_name}-ecs-tasks-sg"
   }
+}
+
+# -----------------------------------------------------------------------------
+# Envoy Gateway Security Group
+# -----------------------------------------------------------------------------
+# Inbound from ECS tasks only; outbound HTTPS only.
+# The inbound rule from ecs_tasks is declared separately below to break the cycle.
+
+resource "aws_security_group" "envoy_gateway" {
+  name        = "${var.project_name}-envoy-gw-sg"
+  description = "Envoy gateway: accept proxy from ECS tasks, egress HTTPS to Okta only"
+  vpc_id      = aws_vpc.main.id
+
+  # Outbound: only HTTPS (port 443) — reaches Okta endpoints via NAT GW
+  egress {
+    description = "HTTPS to Okta (internet) via NAT GW"
+    from_port   = 443
+    to_port     = 443
+    protocol    = "tcp"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
+  # Outbound: HTTPS to VPC Endpoints (CloudWatch logs, SSM exec)
+  egress {
+    description     = "HTTPS to VPC Endpoints (CloudWatch / SSM)"
+    from_port       = 443
+    to_port         = 443
+    protocol        = "tcp"
+    security_groups = [aws_security_group.vpc_endpoints.id]
+  }
+
+  # NOTE: the ingress rule from ecs_tasks (port 3128) is declared separately
+  # below to avoid a circular dependency.
+
+  tags = {
+    Name = "${var.project_name}-envoy-gw-sg"
+  }
+}
+
+# -----------------------------------------------------------------------------
+# Cross-SG rules (declared after both SGs exist to break the cycle)
+# -----------------------------------------------------------------------------
+
+# ECS Tasks → Envoy Gateway on port 3128 (forward-proxy egress)
+resource "aws_security_group_rule" "ecs_tasks_to_gateway_egress" {
+  type                     = "egress"
+  description              = "Forward proxy to envoy-gateway (Okta egress)"
+  from_port                = 3128
+  to_port                  = 3128
+  protocol                 = "tcp"
+  security_group_id        = aws_security_group.ecs_tasks.id
+  source_security_group_id = aws_security_group.envoy_gateway.id
+}
+
+# Envoy Gateway ← ECS Tasks on port 3128 (forward-proxy ingress)
+resource "aws_security_group_rule" "gateway_from_ecs_tasks_ingress" {
+  type                     = "ingress"
+  description              = "Forward-proxy from main ECS task"
+  from_port                = 3128
+  to_port                  = 3128
+  protocol                 = "tcp"
+  security_group_id        = aws_security_group.envoy_gateway.id
+  source_security_group_id = aws_security_group.ecs_tasks.id
 }
