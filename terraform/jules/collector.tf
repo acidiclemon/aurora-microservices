@@ -96,6 +96,9 @@ resource "aws_iam_role_policy_attachment" "collector_exec_policy" {
 resource "aws_cloudwatch_log_group" "collector" {
   name              = "/aws/ecs/${var.project_name}-${terraform.workspace}-collector"
   retention_in_days = 30
+  kms_key_id        = aws_kms_key.logs_key.arn
+
+  depends_on = [aws_kms_key_policy.logs_key]
 }
 
 # ECS Task Definition for Collector

@@ -27,7 +27,7 @@ locals {
     cartservice = {
       port = 7070
       env = [
-        { name = "REDIS_ADDR", value = "${module.redis.cluster_cache_nodes[0].address}:${module.redis.cluster_cache_nodes[0].port}" }
+        { name = "REDIS_ADDR", value = "${module.redis.replication_group_primary_endpoint_address}:6379,ssl=True,abortConnect=False" }
       ]
     }
     checkoutservice = {
@@ -115,7 +115,14 @@ module "alb_sg" {
 
   ingress_cidr_blocks = ["0.0.0.0/0"]
   ingress_rules       = ["http-80-tcp", "https-443-tcp"]
-  egress_rules        = ["all-all"]
+  
+  computed_egress_with_source_security_group_id = [
+    {
+      rule                     = "all-all"
+      source_security_group_id = module.ecs_sg.security_group_id
+    }
+  ]
+  number_of_computed_egress_with_source_security_group_id = 1
 }
 
 module "ecs_sg" {
@@ -128,18 +135,41 @@ module "ecs_sg" {
 
   computed_ingress_with_source_security_group_id = [
     {
-      rule                     = "all-all"
+      from_port                = 8080
+      to_port                  = 8080
+      protocol                 = "tcp"
       source_security_group_id = module.alb_sg.security_group_id
+      description              = "Allow ALB to frontend"
     }
   ]
   number_of_computed_ingress_with_source_security_group_id = 1
 
   ingress_with_self = [
+    for p in [3550, 5050, 7000, 7070, 8080, 9555, 50051] : {
+      from_port   = p
+      to_port     = p
+      protocol    = "tcp"
+      description = "Internal microservice port"
+    }
+  ]
+  
+  egress_rules = ["https-443-tcp"]
+  
+  egress_with_self = [
     {
       rule = "all-all"
     }
   ]
-  egress_rules = ["all-all"]
+  
+  computed_egress_with_source_security_group_id = [
+    {
+      from_port                = 6379
+      to_port                  = 6379
+      protocol                 = "tcp"
+      source_security_group_id = module.redis_sg.security_group_id
+    }
+  ]
+  number_of_computed_egress_with_source_security_group_id = 1
 }
 
 module "redis_sg" {
@@ -159,8 +189,6 @@ module "redis_sg" {
     }
   ]
   number_of_computed_ingress_with_source_security_group_id = 1
-
-  egress_rules = ["all-all"]
 }
 
 ################################################################################
@@ -211,18 +239,26 @@ module "alb" {
   enable_deletion_protection = false
   create_security_group = false
 
-  listeners = merge(
-    {
-      http = {
+  # Dynamically construct listeners to avoid strict Terraform conditional type mismatches
+  listeners = {
+    for k, v in {
+      http_redirect = var.domain_name != "" ? {
+        port     = 80
+        protocol = "HTTP"
+        redirect = {
+          port        = "443"
+          protocol    = "HTTPS"
+          status_code = "HTTP_301"
+        }
+      } : null
+      http_forward = var.domain_name == "" ? {
         port     = 80
         protocol = "HTTP"
         forward = {
           target_group_key = "frontend"
         }
-      }
-    },
-    var.domain_name != "" ? {
-      https = {
+      } : null
+      https = var.domain_name != "" ? {
         port            = 443
         protocol        = "HTTPS"
         ssl_policy      = "ELBSecurityPolicy-TLS13-1-2-2021-06"
@@ -230,9 +266,9 @@ module "alb" {
         forward = {
           target_group_key = "frontend"
         }
-      }
-    } : {}
-  )
+      } : null
+    } : k => v if v != null
+  }
 
   target_groups = {
     frontend = {
@@ -687,17 +723,26 @@ module "redis" {
   source  = "terraform-aws-modules/elasticache/aws"
   version = "~> 1.2"
 
-  cluster_id               = "${var.project_name}-${terraform.workspace}-redis"
-  create_cluster           = true
-  create_replication_group = false
+  replication_group_id     = "${var.project_name}-${terraform.workspace}-redis"
+  description              = "Redis for ${var.project_name}-${terraform.workspace} (encrypted)"
+  create_cluster           = false
+  create_replication_group = true
   subnet_group_name        = "${var.project_name}-${terraform.workspace}-redis-subnet-group"
   create_security_group    = false
 
-  engine          = "redis"
-  node_type       = "cache.t3.micro"
-  num_cache_nodes = 1
-  engine_version  = "7.0"
-  port            = 6379
+  engine            = "redis"
+  node_type         = "cache.t3.micro"
+  num_cache_clusters = 1
+  engine_version    = "7.0"
+  port              = 6379
+
+  # Encryption at rest (F-PCI-01 / F-HIPAA-01)
+  at_rest_encryption_enabled = true
+  kms_key_arn                = aws_kms_key.redis.arn
+
+  # Encryption in transit (F-PCI-02 / F-HIPAA-01)
+  transit_encryption_enabled = true
+  transit_encryption_mode    = "required"
 
   subnet_ids         = module.vpc.private_subnets
   vpc_id             = module.vpc.vpc_id
@@ -762,6 +807,7 @@ resource "aws_cloudfront_distribution" "this" {
   price_class         = "PriceClass_100"
   retain_on_delete    = false
   wait_for_deployment = false
+  web_acl_id          = aws_wafv2_web_acl.cloudfront.arn
 
   aliases = var.domain_name != "" ? ["${var.project_name}-${terraform.workspace}.${var.domain_name}"] : []
 
@@ -779,7 +825,8 @@ resource "aws_cloudfront_distribution" "this" {
 
   default_cache_behavior {
     target_origin_id       = "alb"
-    viewer_protocol_policy = "allow-all"
+    # Redirect HTTP → HTTPS (F-PCI-03 / F-HIPAA-03 — PCI DSS Req 4.2.1)
+    viewer_protocol_policy = "redirect-to-https"
 
     allowed_methods = ["GET", "HEAD", "OPTIONS", "PUT", "POST", "PATCH", "DELETE"]
     cached_methods  = ["GET", "HEAD"]
@@ -933,6 +980,8 @@ resource "null_resource" "ecs_pre_destroy" {
     aws_iam_role_policy_attachment.ecs_sc_tls_infra,
     aws_kms_key.service_connect_tls,
     aws_kms_alias.service_connect_tls,
+    aws_kms_key.redis,
+    aws_kms_alias.redis,
 
     # Observability - Logs & Metrics
     aws_cloudwatch_log_group.frontend,
@@ -948,12 +997,19 @@ resource "null_resource" "ecs_pre_destroy" {
     aws_kms_key.logs_key,
     aws_kms_alias.logs_key,
     aws_kms_key_policy.logs_key,
+    aws_kms_key.regulated_data_key,
+    aws_kms_alias.regulated_data_key,
+    aws_kms_key_policy.regulated_data_key,
 
     # Observability - S3 & Firehose
     aws_s3_bucket.raw_logs,
+    aws_s3_bucket_versioning.raw_logs,
+    aws_s3_bucket_public_access_block.raw_logs,
     aws_s3_bucket_server_side_encryption_configuration.raw_logs,
     aws_s3_bucket_policy.raw_logs,
     aws_s3_bucket.audit_findings,
+    aws_s3_bucket_versioning.audit_findings,
+    aws_s3_bucket_public_access_block.audit_findings,
     aws_s3_bucket_server_side_encryption_configuration.audit_findings,
     aws_s3_bucket_policy.audit_findings,
     aws_cloudwatch_log_data_protection_policy.frontend,
@@ -966,14 +1022,43 @@ resource "null_resource" "ecs_pre_destroy" {
     aws_iam_role_policy.logs_subscription_policy,
     aws_cloudwatch_log_subscription_filter.frontend,
     aws_cloudwatch_log_subscription_filter.microservices,
+    aws_cloudwatch_log_subscription_filter.collector,
 
     # Canaries
     aws_s3_bucket.canary_artifacts,
+    aws_s3_bucket_server_side_encryption_configuration.canary_artifacts,
+    aws_s3_bucket_public_access_block.canary_artifacts,
     aws_s3_bucket_lifecycle_configuration.canary_artifacts,
     aws_iam_role.canary_role,
     aws_iam_role_policy.canary_policy,
     aws_synthetics_canary.home,
     aws_synthetics_canary.product,
-    aws_synthetics_canary.cart
+    aws_synthetics_canary.cart,
+
+    # WAF
+    aws_wafv2_web_acl.cloudfront,
+    aws_wafv2_web_acl_logging_configuration.cloudfront,
+    aws_cloudwatch_log_group.waf,
+    aws_kms_key.waf_logs,
+    aws_kms_alias.waf_logs,
+
+    # VPC Flow Logs
+    aws_s3_bucket.flow_logs,
+    aws_s3_bucket_versioning.flow_logs,
+    aws_s3_bucket_public_access_block.flow_logs,
+    aws_s3_bucket_server_side_encryption_configuration.flow_logs,
+    aws_s3_bucket_policy.flow_logs,
+    aws_flow_log.vpc,
+
+    # CloudTrail
+    aws_s3_bucket.cloudtrail,
+    aws_s3_bucket_versioning.cloudtrail,
+    aws_s3_bucket_public_access_block.cloudtrail,
+    aws_s3_bucket_server_side_encryption_configuration.cloudtrail,
+    aws_s3_bucket_policy.cloudtrail,
+    aws_cloudwatch_log_group.cloudtrail,
+    aws_iam_role.cloudtrail_cloudwatch,
+    aws_iam_role_policy.cloudtrail_cloudwatch,
+    aws_cloudtrail.main
   ]
 }

@@ -5,7 +5,7 @@ output "alb_dns_name" {
 
 output "redis_endpoint" {
   description = "Redis endpoint"
-  value       = try(module.redis.cluster_cache_nodes[0].address, "")
+  value       = try(module.redis.replication_group_primary_endpoint_address, "")
 }
 
 output "vpc_id" {

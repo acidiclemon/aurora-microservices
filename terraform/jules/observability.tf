@@ -19,6 +19,9 @@ data "aws_lb" "selected" {
 resource "aws_cloudwatch_log_group" "frontend" {
   name              = "/aws/ecs/${var.project_name}-${terraform.workspace}-frontend"
   retention_in_days = 30
+  kms_key_id        = aws_kms_key.logs_key.arn
+
+  depends_on = [aws_kms_key_policy.logs_key]
 }
 
 resource "aws_cloudwatch_log_group" "microservices" {
@@ -26,6 +29,9 @@ resource "aws_cloudwatch_log_group" "microservices" {
 
   name              = "/aws/ecs/${var.project_name}-${terraform.workspace}-${each.key}"
   retention_in_days = 30
+  kms_key_id        = aws_kms_key.logs_key.arn
+
+  depends_on = [aws_kms_key_policy.logs_key]
 }
 
 # ------------------------------------------------------------------------------
@@ -220,16 +226,30 @@ resource "aws_iam_role_policy" "security_team_policy" {
           aws_s3_bucket.raw_logs.arn,
           "${aws_s3_bucket.raw_logs.arn}/*",
           aws_s3_bucket.audit_findings.arn,
-          "${aws_s3_bucket.audit_findings.arn}/*"
+          "${aws_s3_bucket.audit_findings.arn}/*",
+          aws_s3_bucket.flow_logs.arn,
+          "${aws_s3_bucket.flow_logs.arn}/*",
+          aws_s3_bucket.cloudtrail.arn,
+          "${aws_s3_bucket.cloudtrail.arn}/*"
         ]
       },
       {
+        Sid    = "DecryptOperationalLogs"
         Effect = "Allow"
         Action = [
           "kms:Decrypt",
           "kms:GenerateDataKey"
         ]
         Resource = aws_kms_key.logs_key.arn
+      },
+      {
+        Sid    = "DecryptRegulatedData"
+        Effect = "Allow"
+        Action = [
+          "kms:Decrypt",
+          "kms:GenerateDataKey"
+        ]
+        Resource = aws_kms_key.regulated_data_key.arn
       }
     ]
   })
@@ -283,6 +303,61 @@ resource "aws_kms_key_policy" "logs_key" {
             "kms:EncryptionContext:aws:logs:arn" : "arn:aws:logs:${var.region}:${data.aws_caller_identity.current.account_id}:*"
           }
         }
+      }
+    ]
+  })
+}
+
+# ------------------------------------------------------------------------------
+# KMS Key for Regulated Data (unmasked PII/PHI/PAN)
+# Separated from logs_key to enforce data classification boundaries.
+# Used by: raw_logs bucket, audit_findings bucket
+# ------------------------------------------------------------------------------
+
+resource "aws_kms_key" "regulated_data_key" {
+  description             = "KMS key for ${var.project_name}-${terraform.workspace} regulated data (unmasked PII/PHI/PAN)"
+  deletion_window_in_days = 7
+  enable_key_rotation     = true
+}
+
+resource "aws_kms_alias" "regulated_data_key" {
+  name          = "alias/${var.project_name}-${terraform.workspace}-regulated-data-key"
+  target_key_id = aws_kms_key.regulated_data_key.key_id
+}
+
+resource "aws_kms_key_policy" "regulated_data_key" {
+  key_id = aws_kms_key.regulated_data_key.id
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Sid    = "Enable IAM User Permissions"
+        Effect = "Allow"
+        Principal = {
+          AWS = "arn:aws:iam::${data.aws_caller_identity.current.account_id}:root"
+        }
+        Action   = "kms:*"
+        Resource = "*"
+      },
+      {
+        Sid    = "Allow CloudWatch Logs for Audit Findings"
+        Effect = "Allow"
+        Principal = {
+          Service = "logs.${var.region}.amazonaws.com"
+        }
+        Action = [
+          "kms:Encrypt",
+          "kms:Decrypt",
+          "kms:ReEncrypt*",
+          "kms:GenerateDataKey*",
+          "kms:DescribeKey"
+        ]
+        Resource = "*"
+        Condition = {
+          ArnLike = {
+            "kms:EncryptionContext:aws:logs:arn" = "arn:aws:logs:${var.region}:${data.aws_caller_identity.current.account_id}:*"
+          }
+        }
       },
       {
         Sid    = "Allow Kinesis Firehose"
@@ -298,6 +373,24 @@ resource "aws_kms_key_policy" "logs_key" {
           "kms:DescribeKey"
         ]
         Resource = "*"
+      },
+      {
+        Sid    = "Allow CloudTrail to encrypt logs"
+        Effect = "Allow"
+        Principal = {
+          Service = "cloudtrail.amazonaws.com"
+        }
+        Action = [
+          "kms:GenerateDataKey*",
+          "kms:Decrypt",
+          "kms:DescribeKey"
+        ]
+        Resource = "*"
+        Condition = {
+          StringLike = {
+            "kms:EncryptionContext:aws:cloudtrail:arn" = "arn:aws:cloudtrail:*:${data.aws_caller_identity.current.account_id}:trail/*"
+          }
+        }
       }
     ]
   })
@@ -313,12 +406,27 @@ resource "aws_s3_bucket" "raw_logs" {
   force_destroy = true
 }
 
+resource "aws_s3_bucket_versioning" "raw_logs" {
+  bucket = aws_s3_bucket.raw_logs.id
+  versioning_configuration {
+    status = "Enabled"
+  }
+}
+
+resource "aws_s3_bucket_public_access_block" "raw_logs" {
+  bucket                  = aws_s3_bucket.raw_logs.id
+  block_public_acls       = true
+  block_public_policy     = true
+  ignore_public_acls      = true
+  restrict_public_buckets = true
+}
+
 resource "aws_s3_bucket_server_side_encryption_configuration" "raw_logs" {
   bucket = aws_s3_bucket.raw_logs.id
 
   rule {
     apply_server_side_encryption_by_default {
-      kms_master_key_id = aws_kms_key.logs_key.arn
+      kms_master_key_id = aws_kms_key.regulated_data_key.arn
       sse_algorithm     = "aws:kms"
     }
   }
@@ -365,12 +473,27 @@ resource "aws_s3_bucket" "audit_findings" {
   force_destroy = true
 }
 
+resource "aws_s3_bucket_versioning" "audit_findings" {
+  bucket = aws_s3_bucket.audit_findings.id
+  versioning_configuration {
+    status = "Enabled"
+  }
+}
+
+resource "aws_s3_bucket_public_access_block" "audit_findings" {
+  bucket                  = aws_s3_bucket.audit_findings.id
+  block_public_acls       = true
+  block_public_policy     = true
+  ignore_public_acls      = true
+  restrict_public_buckets = true
+}
+
 resource "aws_s3_bucket_server_side_encryption_configuration" "audit_findings" {
   bucket = aws_s3_bucket.audit_findings.id
 
   rule {
     apply_server_side_encryption_by_default {
-      kms_master_key_id = aws_kms_key.logs_key.arn
+      kms_master_key_id = aws_kms_key.regulated_data_key.arn
       sse_algorithm     = "aws:kms"
     }
   }
@@ -560,7 +683,7 @@ resource "aws_iam_role_policy" "firehose_policy" {
           "kms:Decrypt",
           "kms:GenerateDataKey"
         ]
-        Resource = aws_kms_key.logs_key.arn
+        Resource = aws_kms_key.regulated_data_key.arn
       }
     ]
   })
@@ -569,6 +692,12 @@ resource "aws_iam_role_policy" "firehose_policy" {
 resource "aws_kinesis_firehose_delivery_stream" "logs_stream" {
   name        = "${var.project_name}-${terraform.workspace}-logs-stream"
   destination = "extended_s3"
+
+  server_side_encryption {
+    enabled  = true
+    key_type = "CUSTOMER_MANAGED_CMK"
+    key_arn  = aws_kms_key.regulated_data_key.arn
+  }
 
   extended_s3_configuration {
     role_arn   = aws_iam_role.firehose_role.arn
@@ -616,7 +745,13 @@ resource "aws_iam_role_policy" "logs_subscription_policy" {
       {
         Effect = "Allow"
         Action = "logs:Unmask"
-        Resource = "*"
+        Resource = concat(
+          [
+            "${aws_cloudwatch_log_group.frontend.arn}:*",
+            "${aws_cloudwatch_log_group.collector.arn}:*"
+          ],
+          [for g in aws_cloudwatch_log_group.microservices : "${g.arn}:*"]
+        )
       }
     ]
   })
@@ -628,6 +763,8 @@ resource "aws_cloudwatch_log_subscription_filter" "frontend" {
   filter_pattern  = "" # All logs
   destination_arn = aws_kinesis_firehose_delivery_stream.logs_stream.arn
   role_arn        = aws_iam_role.logs_subscription_role.arn
+
+  depends_on = [aws_iam_role_policy.logs_subscription_policy]
 }
 
 resource "aws_cloudwatch_log_subscription_filter" "microservices" {
@@ -638,4 +775,119 @@ resource "aws_cloudwatch_log_subscription_filter" "microservices" {
   filter_pattern  = "" # All logs
   destination_arn = aws_kinesis_firehose_delivery_stream.logs_stream.arn
   role_arn        = aws_iam_role.logs_subscription_role.arn
+
+  depends_on = [aws_iam_role_policy.logs_subscription_policy]
+}
+
+resource "aws_cloudwatch_log_subscription_filter" "collector" {
+  name            = "${var.project_name}-${terraform.workspace}-collector-to-s3"
+  log_group_name  = aws_cloudwatch_log_group.collector.name
+  filter_pattern  = "" # All logs
+  destination_arn = aws_kinesis_firehose_delivery_stream.logs_stream.arn
+  role_arn        = aws_iam_role.logs_subscription_role.arn
+
+  depends_on = [aws_iam_role_policy.logs_subscription_policy]
+}
+
+# ------------------------------------------------------------------------------
+# VPC Flow Logs → S3 (F-PCI-06 — PCI DSS Req 10.2.1, HIPAA §164.312(b))
+# ------------------------------------------------------------------------------
+
+resource "aws_s3_bucket" "flow_logs" {
+  bucket        = "${var.project_name}-${terraform.workspace}-flow-logs"
+  force_destroy = true
+}
+
+resource "aws_s3_bucket_versioning" "flow_logs" {
+  bucket = aws_s3_bucket.flow_logs.id
+  versioning_configuration {
+    status = "Enabled"
+  }
+}
+
+resource "aws_s3_bucket_public_access_block" "flow_logs" {
+  bucket                  = aws_s3_bucket.flow_logs.id
+  block_public_acls       = true
+  block_public_policy     = true
+  ignore_public_acls      = true
+  restrict_public_buckets = true
+}
+
+resource "aws_s3_bucket_server_side_encryption_configuration" "flow_logs" {
+  bucket = aws_s3_bucket.flow_logs.id
+
+  rule {
+    apply_server_side_encryption_by_default {
+      kms_master_key_id = aws_kms_key.logs_key.arn
+      sse_algorithm     = "aws:kms"
+    }
+  }
+}
+
+resource "aws_s3_bucket_policy" "flow_logs" {
+  bucket = aws_s3_bucket.flow_logs.id
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      # Allow VPC Flow Logs delivery
+      {
+        Sid    = "AWSLogDeliveryWrite"
+        Effect = "Allow"
+        Principal = {
+          Service = "delivery.logs.amazonaws.com"
+        }
+        Action   = "s3:PutObject"
+        Resource = "${aws_s3_bucket.flow_logs.arn}/*"
+        Condition = {
+          StringEquals = {
+            "s3:x-amz-acl"      = "bucket-owner-full-control"
+            "aws:SourceAccount" = data.aws_caller_identity.current.account_id
+          }
+        }
+      },
+      {
+        Sid    = "AWSLogDeliveryAclCheck"
+        Effect = "Allow"
+        Principal = {
+          Service = "delivery.logs.amazonaws.com"
+        }
+        Action   = "s3:GetBucketAcl"
+        Resource = aws_s3_bucket.flow_logs.arn
+        Condition = {
+          StringEquals = {
+            "aws:SourceAccount" = data.aws_caller_identity.current.account_id
+          }
+        }
+      },
+      # Restrict read access to Security Team Role only
+      {
+        Sid       = "SecurityTeamRead"
+        Effect    = "Deny"
+        Principal = "*"
+        Action    = "s3:GetObject"
+        Resource  = "${aws_s3_bucket.flow_logs.arn}/*"
+        Condition = {
+          StringNotLike = {
+            "aws:PrincipalArn" = [
+              aws_iam_role.security_team_role.arn,
+              "${aws_iam_role.security_team_role.arn}/*"
+            ]
+          }
+        }
+      }
+    ]
+  })
+}
+
+resource "aws_flow_log" "vpc" {
+  vpc_id               = module.vpc.vpc_id
+  log_destination      = aws_s3_bucket.flow_logs.arn
+  log_destination_type = "s3"
+  traffic_type         = "ALL"
+
+  tags = {
+    Name        = "${var.project_name}-${terraform.workspace}-vpc-flow-logs"
+    Environment = terraform.workspace
+    Project     = var.project_name
+  }
 }

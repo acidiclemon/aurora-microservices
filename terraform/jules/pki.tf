@@ -144,3 +144,18 @@ resource "aws_kms_alias" "service_connect_tls" {
   name          = "alias/${var.project_name}-${terraform.workspace}-service-connect-tls-key"
   target_key_id = aws_kms_key.service_connect_tls[0].key_id
 }
+
+################################################################################
+# KMS Key for Redis Encryption at Rest
+################################################################################
+
+resource "aws_kms_key" "redis" {
+  description             = "KMS key for ${var.project_name}-${terraform.workspace} Redis at-rest encryption"
+  deletion_window_in_days = 7
+  enable_key_rotation     = true
+}
+
+resource "aws_kms_alias" "redis" {
+  name          = "alias/${var.project_name}-${terraform.workspace}-redis-key"
+  target_key_id = aws_kms_key.redis.key_id
+}
