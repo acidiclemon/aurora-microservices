@@ -93,7 +93,7 @@ resource "aws_ecs_task_definition" "echo" {
 
   runtime_platform {
     operating_system_family = "LINUX"
-    cpu_architecture        = "ARM64"
+    cpu_architecture        = "X86_64"
   }
 
   container_definitions = jsonencode([
@@ -249,7 +249,7 @@ resource "aws_ecs_task_definition" "envoy_gateway" {
 
   runtime_platform {
     operating_system_family = "LINUX"
-    cpu_architecture        = "ARM64"
+    cpu_architecture        = "X86_64"
   }
 
   container_definitions = jsonencode([
