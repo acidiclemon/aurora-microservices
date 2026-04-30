@@ -130,7 +130,7 @@ resource "aws_ecs_task_definition" "echo" {
     # -----------------------------------------------------------------------
     {
       name      = "envoy"
-      image     = "envoyproxy/envoy:v1.30-latest"
+      image     = "envoyproxy/envoy:v1.36.6"
       essential = true
 
       portMappings = [
@@ -255,7 +255,7 @@ resource "aws_ecs_task_definition" "envoy_gateway" {
   container_definitions = jsonencode([
     {
       name      = "envoy-gateway"
-      image     = "envoyproxy/envoy:v1.30-latest"
+      image     = "envoyproxy/envoy:v1.36.6"
       essential = true
 
       portMappings = [
