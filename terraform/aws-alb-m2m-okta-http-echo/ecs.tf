@@ -102,7 +102,7 @@ resource "aws_ecs_task_definition" "echo" {
     # -----------------------------------------------------------------------
     {
       name      = "http-echo"
-      image     = "mendhak/http-https-echo:39"
+      image     = "393177628825.dkr.ecr.us-east-2.amazonaws.com/aurora-microservices/mendhak-http-https-echo:39"
       essential = true
 
       portMappings = [
@@ -130,7 +130,7 @@ resource "aws_ecs_task_definition" "echo" {
     # -----------------------------------------------------------------------
     {
       name      = "envoy"
-      image     = "envoyproxy/envoy:v1.36.6"
+      image     = "393177628825.dkr.ecr.us-east-2.amazonaws.com/aurora-microservices/envoy:v1.36.6"
       essential = true
 
       portMappings = [
@@ -255,7 +255,7 @@ resource "aws_ecs_task_definition" "envoy_gateway" {
   container_definitions = jsonencode([
     {
       name      = "envoy-gateway"
-      image     = "envoyproxy/envoy:v1.36.6"
+      image     = "393177628825.dkr.ecr.us-east-2.amazonaws.com/aurora-microservices/envoy:v1.36.6"
       essential = true
 
       portMappings = [
