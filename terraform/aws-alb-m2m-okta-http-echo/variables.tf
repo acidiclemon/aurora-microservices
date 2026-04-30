@@ -146,5 +146,5 @@ variable "enable_ecs_exec" {
     Set to false in production if interactive access is not required.
   EOT
   type        = bool
-  default     = false
+  default     = true
 }
