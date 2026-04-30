@@ -83,6 +83,15 @@ resource "aws_security_group" "ecs_tasks" {
     security_groups = [aws_security_group.vpc_endpoints.id]
   }
 
+  # Egress: HTTPS to S3 Gateway Endpoint (for ECR image layers)
+  egress {
+    description     = "HTTPS to S3 Gateway Endpoint"
+    from_port       = 443
+    to_port         = 443
+    protocol        = "tcp"
+    prefix_list_ids = [aws_vpc_endpoint.s3.prefix_list_id]
+  }
+
   # NOTE: the egress rule to envoy_gateway (port 3128) is declared separately
   # below to avoid a circular dependency between the two SGs.
 
