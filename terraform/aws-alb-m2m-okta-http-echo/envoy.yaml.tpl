@@ -120,8 +120,7 @@ static_resources:
             trusted_ca:
               filename: /etc/ssl/certs/ca-certificates.crt
     # Tunnel through the envoy-gateway forward proxy (HTTP CONNECT)
-    upstream_http_protocol_options:
-      accept_http_10: true
+
     http_protocol_options: {}
     # Proxy the connection through the envoy-gateway container
     # The gateway address is injected at ECS task launch time via the
