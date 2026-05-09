@@ -45,39 +45,28 @@ static_resources:
           route_config:
             name: proxy_route
             virtual_hosts:
-            # ------------------------------------------------------------------
-            # ALLOWLIST: Only the Okta domain is permitted.
-            # Any other Host header → 403 Forbidden.
-            # ------------------------------------------------------------------
-            - name: okta_allowed
+            - name: allow_all
               domains:
-                - "${okta_domain}"
-                - "${okta_domain}:443"
+                - "*"
               routes:
               - match:
                   connect_matcher: {}
                 route:
-                  cluster: okta_upstream
+                  cluster: dynamic_forward_proxy_cluster
                   upgrade_configs:
                   - upgrade_type: CONNECT
                     connect_config: {}
               - match:
                   prefix: "/"
                 route:
-                  cluster: okta_upstream
-
-            # Catch-all: block everything else
-            - name: deny_all
-              domains:
-                - "*"
-              routes:
-              - match:
-                  prefix: "/"
-                direct_response:
-                  status: 403
-                  body:
-                    inline_string: "Forbidden: only Okta endpoints are allowed through this gateway.\n"
+                  cluster: dynamic_forward_proxy_cluster
           http_filters:
+          - name: envoy.filters.http.dynamic_forward_proxy
+            typed_config:
+              "@type": type.googleapis.com/envoy.extensions.filters.http.dynamic_forward_proxy.v3.FilterConfig
+              dns_cache_config:
+                name: dynamic_forward_proxy_cache_config
+                dns_lookup_family: V4_ONLY
           - name: envoy.filters.http.router
             typed_config:
               "@type": type.googleapis.com/envoy.extensions.filters.http.router.v3.Router
@@ -86,29 +75,16 @@ static_resources:
   # Clusters
   # -------------------------------------------------------------------------
   clusters:
-  - name: okta_upstream
+  - name: dynamic_forward_proxy_cluster
     connect_timeout: 10s
-    type: STRICT_DNS
-    dns_lookup_family: V4_ONLY
-    lb_policy: ROUND_ROBIN
-    transport_socket:
-      name: envoy.transport_sockets.tls
+    lb_policy: CLUSTER_PROVIDED
+    cluster_type:
+      name: envoy.clusters.dynamic_forward_proxy
       typed_config:
-        "@type": type.googleapis.com/envoy.extensions.transport_sockets.tls.v3.UpstreamTlsContext
-        sni: "${okta_domain}"
-        common_tls_context:
-          validation_context:
-            trusted_ca:
-              filename: /etc/ssl/certs/ca-certificates.crt   # Verify Okta's cert
-    load_assignment:
-      cluster_name: okta_upstream
-      endpoints:
-      - lb_endpoints:
-        - endpoint:
-            address:
-              socket_address:
-                address: "${okta_domain}"
-                port_value: 443
+        "@type": type.googleapis.com/envoy.extensions.clusters.dynamic_forward_proxy.v3.ClusterConfig
+        dns_cache_config:
+          name: dynamic_forward_proxy_cache_config
+          dns_lookup_family: V4_ONLY
 
 admin:
   address:
