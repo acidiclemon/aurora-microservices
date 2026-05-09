@@ -33,11 +33,11 @@ resource "aws_security_group" "alb" {
 
   # Egress restricted to VPC CIDR so ALB can only reach ECS tasks
   egress {
-    description = "Egress to VPC (reaches ECS tasks)"
+    description = "Egress to ECS tasks and Internet (for OIDC token exchange)"
     from_port   = 0
     to_port     = 0
     protocol    = "-1"
-    cidr_blocks = [var.vpc_cidr]
+    cidr_blocks = ["0.0.0.0/0"]
   }
 
   tags = {
