@@ -45,9 +45,10 @@ static_resources:
           route_config:
             name: proxy_route
             virtual_hosts:
-            - name: allow_all
+            - name: okta_allowed
               domains:
-                - "*"
+                - "${okta_domain}"
+                - "${okta_domain}:443"
               routes:
               - match:
                   connect_matcher: {}
@@ -60,6 +61,18 @@ static_resources:
                   prefix: "/"
                 route:
                   cluster: dynamic_forward_proxy_cluster
+
+            # Catch-all: block everything else
+            - name: deny_all
+              domains:
+                - "*"
+              routes:
+              - match:
+                  prefix: "/"
+                direct_response:
+                  status: 403
+                  body:
+                    inline_string: "Forbidden: only Okta endpoints are allowed through this gateway.\n"
           http_filters:
           - name: envoy.filters.http.dynamic_forward_proxy
             typed_config:
