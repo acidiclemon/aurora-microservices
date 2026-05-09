@@ -45,10 +45,14 @@ static_resources:
           route_config:
             name: proxy_route
             virtual_hosts:
-            - name: okta_allowed
+            - name: allowed_domains
               domains:
                 - "${okta_domain}"
                 - "${okta_domain}:443"
+                - "example.com"
+                - "example.com:443"
+                - "*.example.com"
+                - "*.example.com:443"
               routes:
               - match:
                   connect_matcher: {}
