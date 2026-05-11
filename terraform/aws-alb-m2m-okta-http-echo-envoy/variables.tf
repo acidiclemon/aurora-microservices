@@ -117,3 +117,34 @@ variable "enable_bypass_rule" {
   type        = bool
   default     = true
 }
+
+# -----------------------------------------------------------------------------
+# ECS Exec (interactive shell via AWS Systems Manager)
+# -----------------------------------------------------------------------------
+
+variable "enable_ecs_exec" {
+  description = <<-EOT
+    Enable ECS Exec on ECS services, allowing interactive shell access to
+    running containers via the AWS Console or CLI without SSH or a bastion host.
+
+    Prerequisites (already wired by this module when true):
+      • Task Role has ssmmessages:* IAM permissions      (iam.tf)
+      • SSM, SSMMessages, EC2Messages VPC Endpoints exist (network.tf)
+      • Cluster execute_command_configuration is set      (ecs.tf)
+
+    Usage (CLI):
+      aws ecs execute-command \
+        --cluster <cluster-name> \
+        --task <task-id> \
+        --container http-echo \
+        --interactive \
+        --command "/bin/sh"
+
+    Usage (Console):
+      ECS → Clusters → <cluster> → Tasks → <task> → Execute command tab.
+
+    Set to false in production if interactive access is not required.
+  EOT
+  type        = bool
+  default     = true
+}
