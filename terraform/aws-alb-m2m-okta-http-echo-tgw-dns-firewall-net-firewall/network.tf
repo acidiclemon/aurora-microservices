@@ -48,7 +48,7 @@ resource "aws_internet_gateway" "main" {
 # Subnets
 # -----------------------------------------------------------------------------
 
-# Public subnets — ALB lives here
+# Public subnets — ALB lives here (AWS ALB requires at least 2 subnets in different AZs)
 resource "aws_subnet" "public" {
   count                   = 2
   vpc_id                  = aws_vpc.main.id
@@ -62,10 +62,11 @@ resource "aws_subnet" "public" {
 }
 
 # Private subnets — ECS tasks (internet egress via TGW → Firewall → NAT)
+# Simplified to 1 AZ as requested.
 resource "aws_subnet" "private" {
-  count             = 2
+  count             = 1
   vpc_id            = aws_vpc.main.id
-  cidr_block        = cidrsubnet(var.vpc_cidr, 8, count.index + 2)            # .2/24, .3/24
+  cidr_block        = cidrsubnet(var.vpc_cidr, 8, count.index + 2)            # .2/24
   availability_zone = data.aws_availability_zones.available.names[count.index]
 
   tags = {
@@ -115,7 +116,7 @@ resource "aws_route_table_association" "public" {
 }
 
 resource "aws_route_table_association" "private" {
-  count          = 2
+  count          = 1
   subnet_id      = aws_subnet.private[count.index].id
   route_table_id = aws_route_table.private.id
 }

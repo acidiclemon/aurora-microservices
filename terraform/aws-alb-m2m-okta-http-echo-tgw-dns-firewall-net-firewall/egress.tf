@@ -35,9 +35,9 @@ resource "aws_internet_gateway" "egress" {
 # -----------------------------------------------------------------------------
 
 resource "aws_subnet" "egress_public" {
-  count                   = 2
+  count                   = 1
   vpc_id                  = aws_vpc.egress.id
-  cidr_block              = cidrsubnet(var.egress_vpc_cidr, 8, count.index)    # .0/24, .1/24
+  cidr_block              = cidrsubnet(var.egress_vpc_cidr, 8, count.index)    # .0/24
   availability_zone       = data.aws_availability_zones.available.names[count.index]
   map_public_ip_on_launch = true
 
@@ -51,9 +51,9 @@ resource "aws_subnet" "egress_public" {
 # -----------------------------------------------------------------------------
 
 resource "aws_subnet" "egress_tgw" {
-  count             = 2
+  count             = 1
   vpc_id            = aws_vpc.egress.id
-  cidr_block        = cidrsubnet(var.egress_vpc_cidr, 8, count.index + 2)     # .2/24, .3/24
+  cidr_block        = cidrsubnet(var.egress_vpc_cidr, 8, count.index + 2)     # .2/24
   availability_zone = data.aws_availability_zones.available.names[count.index]
 
   tags = {
@@ -66,7 +66,7 @@ resource "aws_subnet" "egress_tgw" {
 # -----------------------------------------------------------------------------
 
 resource "aws_eip" "egress_nat" {
-  count  = 2
+  count  = 1
   domain = "vpc"
 
   tags = {
@@ -75,7 +75,7 @@ resource "aws_eip" "egress_nat" {
 }
 
 resource "aws_nat_gateway" "egress" {
-  count         = 2
+  count         = 1
   allocation_id = aws_eip.egress_nat[count.index].id
   subnet_id     = aws_subnet.egress_public[count.index].id
 
@@ -114,14 +114,14 @@ resource "aws_route" "egress_public_return_to_ecs" {
 }
 
 resource "aws_route_table_association" "egress_public" {
-  count          = 2
+  count          = 1
   subnet_id      = aws_subnet.egress_public[count.index].id
   route_table_id = aws_route_table.egress_public.id
 }
 
 # TGW attachment subnets: 0.0.0.0/0 → NAT GW (same AZ)
 resource "aws_route_table" "egress_tgw" {
-  count  = 2
+  count  = 1
   vpc_id = aws_vpc.egress.id
 
   tags = {
@@ -130,14 +130,14 @@ resource "aws_route_table" "egress_tgw" {
 }
 
 resource "aws_route" "egress_tgw_to_nat" {
-  count                  = 2
+  count                  = 1
   route_table_id         = aws_route_table.egress_tgw[count.index].id
   destination_cidr_block = "0.0.0.0/0"
   nat_gateway_id         = aws_nat_gateway.egress[count.index].id
 }
 
 resource "aws_route_table_association" "egress_tgw" {
-  count          = 2
+  count          = 1
   subnet_id      = aws_subnet.egress_tgw[count.index].id
   route_table_id = aws_route_table.egress_tgw[count.index].id
 }

@@ -32,9 +32,9 @@ resource "aws_vpc" "firewall" {
 # -----------------------------------------------------------------------------
 
 resource "aws_subnet" "firewall" {
-  count             = 2
+  count             = 1
   vpc_id            = aws_vpc.firewall.id
-  cidr_block        = cidrsubnet(var.firewall_vpc_cidr, 8, count.index)       # .0/24, .1/24
+  cidr_block        = cidrsubnet(var.firewall_vpc_cidr, 8, count.index)       # .0/24
   availability_zone = data.aws_availability_zones.available.names[count.index]
 
   tags = {
@@ -47,9 +47,9 @@ resource "aws_subnet" "firewall" {
 # -----------------------------------------------------------------------------
 
 resource "aws_subnet" "firewall_tgw" {
-  count             = 2
+  count             = 1
   vpc_id            = aws_vpc.firewall.id
-  cidr_block        = cidrsubnet(var.firewall_vpc_cidr, 8, count.index + 2)   # .2/24, .3/24
+  cidr_block        = cidrsubnet(var.firewall_vpc_cidr, 8, count.index + 2)   # .2/24
   availability_zone = data.aws_availability_zones.available.names[count.index]
 
   tags = {
@@ -123,11 +123,8 @@ resource "aws_networkfirewall_firewall" "main" {
   firewall_policy_arn = aws_networkfirewall_firewall_policy.main.arn
   vpc_id              = aws_vpc.firewall.id
 
-  dynamic "subnet_mapping" {
-    for_each = aws_subnet.firewall[*].id
-    content {
-      subnet_id = subnet_mapping.value
-    }
+  subnet_mapping {
+    subnet_id = aws_subnet.firewall[0].id
   }
 
   tags = {
@@ -154,7 +151,7 @@ locals {
 # TGW attachment subnets: route all traffic to the Network Firewall endpoint
 # in the same AZ for inspection.
 resource "aws_route_table" "firewall_tgw" {
-  count  = 2
+  count  = 1
   vpc_id = aws_vpc.firewall.id
 
   tags = {
@@ -163,14 +160,14 @@ resource "aws_route_table" "firewall_tgw" {
 }
 
 resource "aws_route" "firewall_tgw_to_fw_endpoint" {
-  count                  = 2
+  count                  = 1
   route_table_id         = aws_route_table.firewall_tgw[count.index].id
   destination_cidr_block = "0.0.0.0/0"
   vpc_endpoint_id        = local.fw_endpoint_ids[data.aws_availability_zones.available.names[count.index]]
 }
 
 resource "aws_route_table_association" "firewall_tgw" {
-  count          = 2
+  count          = 1
   subnet_id      = aws_subnet.firewall_tgw[count.index].id
   route_table_id = aws_route_table.firewall_tgw[count.index].id
 }
@@ -178,7 +175,7 @@ resource "aws_route_table_association" "firewall_tgw" {
 # Firewall subnets: after inspection, route traffic to TGW (toward Egress VPC).
 # Return traffic to ECS VPC also goes via TGW.
 resource "aws_route_table" "firewall" {
-  count  = 2
+  count  = 1
   vpc_id = aws_vpc.firewall.id
 
   tags = {
@@ -187,7 +184,7 @@ resource "aws_route_table" "firewall" {
 }
 
 resource "aws_route" "firewall_to_tgw" {
-  count                  = 2
+  count                  = 1
   route_table_id         = aws_route_table.firewall[count.index].id
   destination_cidr_block = "0.0.0.0/0"
   transit_gateway_id     = aws_ec2_transit_gateway.main.id
@@ -196,7 +193,7 @@ resource "aws_route" "firewall_to_tgw" {
 }
 
 resource "aws_route" "firewall_return_to_ecs" {
-  count                  = 2
+  count                  = 1
   route_table_id         = aws_route_table.firewall[count.index].id
   destination_cidr_block = var.vpc_cidr
   transit_gateway_id     = aws_ec2_transit_gateway.main.id
@@ -205,7 +202,7 @@ resource "aws_route" "firewall_return_to_ecs" {
 }
 
 resource "aws_route_table_association" "firewall" {
-  count          = 2
+  count          = 1
   subnet_id      = aws_subnet.firewall[count.index].id
   route_table_id = aws_route_table.firewall[count.index].id
 }
