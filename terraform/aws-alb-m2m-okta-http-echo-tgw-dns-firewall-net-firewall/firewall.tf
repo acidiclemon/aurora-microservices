@@ -77,7 +77,7 @@ resource "aws_networkfirewall_rule_group" "allow_okta" {
     }
 
     stateful_rule_options {
-      capacity = 100
+      rule_order = "STRICT_ORDER"
     }
   }
 
