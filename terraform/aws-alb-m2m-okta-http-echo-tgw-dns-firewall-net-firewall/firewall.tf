@@ -133,6 +133,52 @@ resource "aws_networkfirewall_firewall" "main" {
 }
 
 # -----------------------------------------------------------------------------
+# CloudWatch Log Groups for Firewall
+# -----------------------------------------------------------------------------
+
+resource "aws_cloudwatch_log_group" "nfw_alerts" {
+  name              = "/aws/nfw/${var.project_name}-alerts"
+  retention_in_days = 7
+
+  tags = {
+    Name = "${var.project_name}-nfw-alerts"
+  }
+}
+
+resource "aws_cloudwatch_log_group" "nfw_flows" {
+  name              = "/aws/nfw/${var.project_name}-flows"
+  retention_in_days = 7
+
+  tags = {
+    Name = "${var.project_name}-nfw-flows"
+  }
+}
+
+# -----------------------------------------------------------------------------
+# Network Firewall Logging Configuration
+# -----------------------------------------------------------------------------
+
+resource "aws_networkfirewall_logging_configuration" "main" {
+  firewall_arn = aws_networkfirewall_firewall.main.arn
+  logging_configuration {
+    log_destination_config {
+      log_destination = {
+        logGroup = aws_cloudwatch_log_group.nfw_alerts.name
+      }
+      log_destination_type = "CloudWatchLogs"
+      log_type             = "ALERT"
+    }
+    log_destination_config {
+      log_destination = {
+        logGroup = aws_cloudwatch_log_group.nfw_flows.name
+      }
+      log_destination_type = "CloudWatchLogs"
+      log_type             = "FLOW"
+    }
+  }
+}
+
+# -----------------------------------------------------------------------------
 # Locals — extract per-AZ firewall endpoint IDs from the sync_states output
 # -----------------------------------------------------------------------------
 
