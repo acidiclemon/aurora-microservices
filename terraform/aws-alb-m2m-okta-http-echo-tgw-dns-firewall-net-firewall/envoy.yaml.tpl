@@ -62,7 +62,7 @@ static_resources:
                     http_uri:
                       uri: "${okta_issuer}/v1/keys"
                       cluster: okta_jwks_cluster
-                      timeout: 10s
+                      timeout: 5s
                     cache_duration:
                       seconds: 300
               rules:
@@ -98,19 +98,8 @@ static_resources:
 
   # Okta JWKS cluster — direct egress (routed via TGW/FW/NAT)
   - name: okta_jwks_cluster
-    connect_timeout: 10s
-    type: LOGICAL_DNS
-    dns_lookup_family: V4_ONLY
-    lb_policy: ROUND_ROBIN
-    transport_socket:
-      name: envoy.transport_sockets.tls
-      typed_config:
-        "@type": type.googleapis.com/envoy.extensions.transport_sockets.tls.v3.UpstreamTlsContext
-        sni: "${okta_domain}"
-        common_tls_context:
-          validation_context:
-            trusted_ca:
-              filename: /etc/ssl/certs/ca-certificates.crt
+    connect_timeout: 5s
+    type: STRICT_DNS
     load_assignment:
       cluster_name: okta_jwks_cluster
       endpoints:
@@ -120,6 +109,15 @@ static_resources:
               socket_address:
                 address: "${okta_domain}"
                 port_value: 443
+    transport_socket:
+      name: envoy.transport_sockets.tls
+      typed_config:
+        "@type": type.googleapis.com/envoy.extensions.transport_sockets.tls.v3.UpstreamTlsContext
+        sni: "${okta_domain}"
+        common_tls_context:
+          validation_context:
+            trusted_ca:
+              filename: /etc/ssl/certs/ca-certificates.crt
 
 admin:
   address:
