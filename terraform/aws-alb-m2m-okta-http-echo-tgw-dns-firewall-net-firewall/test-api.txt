@@ -1,0 +1,39 @@
+# 1. Get Token from Okta (Replace placeholders with your data)
+curl --request POST \
+  --url https://your-domain.okta.com/oauth2/default/v1/token \
+  --header 'accept: application/json' \
+  --header 'content-type: application/x-www-form-urlencoded' \
+  --data 'grant_type=client_credentials' \
+  --data 'client_id=YOUR_CLIENT_ID' \
+  --data 'client_secret=YOUR_CLIENT_SECRET' \
+  --data 'scope=test'
+
+
+# 2. Hit the Envoy-protected API using the token string from above
+curl -i https://api.your-domain.com/ \
+  -H "Authorization: Bearer YOUR_ACCESS_TOKEN_STRING"
+
+
+# ==============================================================================
+# OPTION B: Public/Private Key Authentication (private_key_jwt)
+# ==============================================================================
+# Instead of a client_secret, you sign a "Client Assertion" JWT using your Private Key.
+# The Client Assertion JWT must contain:
+#   - iss: YOUR_CLIENT_ID
+#   - sub: YOUR_CLIENT_ID
+#   - aud: https://your-domain.okta.com/oauth2/default/v1/token
+#   - exp: <Expiration timestamp in seconds>
+#   - jti: <Unique random string>
+#
+# Once you sign this assertion using your Private Key, pass it to Okta:
+
+curl --request POST \
+  --url https://your-domain.okta.com/oauth2/default/v1/token \
+  --header 'accept: application/json' \
+  --header 'content-type: application/x-www-form-urlencoded' \
+  --data 'grant_type=client_credentials' \
+  --data 'client_assertion_type=urn:ietf:params:oauth:client-assertion-type:jwt-bearer' \
+  --data 'client_assertion=YOUR_SIGNED_CLIENT_ASSERTION_JWT' \
+  --data 'scope=test'
+
+# Then, use the returned Access Token to hit Envoy exactly like step 2 above!
