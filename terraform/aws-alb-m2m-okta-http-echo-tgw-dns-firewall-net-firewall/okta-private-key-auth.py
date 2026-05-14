@@ -15,8 +15,8 @@ except ImportError:
 # ==========================================================
 # Configuration variables
 # ==========================================================
-CLIENT_ID = "YOUR_CLIENT_ID"
-OKTA_TOKEN_URL = "https://your-domain.okta.com/oauth2/default/v1/token"
+CLIENT_ID = "0oa11icvpybuYu3NS698"
+OKTA_TOKEN_URL = "https://integrator-9446478.okta.com/oauth2/aus11iepfxos828bn698/v1/token"
 PRIVATE_KEY_FILE = "private.pem"
 SCOPE = "test"
 

@@ -103,6 +103,15 @@ resource "aws_networkfirewall_firewall_policy" "main" {
       rule_order = "STRICT_ORDER"
     }
 
+    policy_variables {
+      rule_variables {
+        key = "HOME_NET"
+        ip_set {
+          definition = [var.vpc_cidr, var.firewall_vpc_cidr]
+        }
+      }
+    }
+
     stateful_rule_group_reference {
       priority     = 1
       resource_arn = aws_networkfirewall_rule_group.allow_okta.arn
